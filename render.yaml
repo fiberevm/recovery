@@ -1,0 +1,39 @@
+# Render Blueprint for https://recovery.fiber.so. Connect this repo's `main` branch as a Blueprint.
+# The page is one self-contained file (dist/index.html), so it deploys as a static site.
+services:
+  - type: web
+    name: fiber-recovery
+    runtime: static
+    repo: https://github.com/fiberevm/recovery
+    branch: main
+    buildCommand: bun install --frozen-lockfile && bun run build
+    staticPublishPath: ./dist
+    envVars:
+      # The version the release build is made and tested with.
+      - key: BUN_VERSION
+        value: 1.4.4
+    domains:
+      - recovery.fiber.so
+    headers:
+      # The page's own <meta> policy can't forbid framing, so a hostile site could otherwise
+      # embed it and trick clicks while a backup is unlocked.
+      - path: /*
+        name: Content-Security-Policy
+        value: frame-ancestors 'none'
+      - path: /*
+        name: X-Frame-Options
+        value: DENY
+      - path: /*
+        name: Referrer-Policy
+        value: no-referrer
+      - path: /*
+        name: X-Content-Type-Options
+        value: nosniff
+      - path: /*
+        name: Strict-Transport-Security
+        value: max-age=31536000
+      # Every deploy replaces the single page, so browsers should always check for a new one.
+      - path: /*
+        name: Cache-Control
+        value: no-cache
+    autoDeployTrigger: commit

@@ -79,6 +79,12 @@ bun scripts/fork-shield.ts 100 25.5   # gives the test wallet two private fUSDT0
 
 Then set the Arbitrum RPC to `http://127.0.0.1:8545` under **RPC settings** and unlock the test backup. To send, your browser wallet must also be connected to the fork.
 
+## Deploying
+
+`render.yaml` is a [Render](https://render.com) Blueprint for https://recovery.fiber.so. It builds the page with Bun and serves `dist/index.html` as a static site, with headers that stop other sites from framing it. In Render, create a Blueprint from this repo's `main` branch, then point `recovery.fiber.so` at the service in DNS as Render instructs. Every push to `main` redeploys.
+
+Refresh the pool snapshots (`bun run snapshot`) and commit them before a release, so scans start from recent history.
+
 ## How it works
 
 ### 1. Opening the backup
