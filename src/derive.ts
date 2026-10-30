@@ -1,11 +1,5 @@
 import { ed25519 } from "@noble/curves/ed25519.js";
-import { secp256k1 } from "@noble/curves/secp256k1.js";
-import { hmac } from "@noble/hashes/hmac.js";
-import { sha512 } from "@noble/hashes/sha2.js";
-import { keccak_256 } from "@noble/hashes/sha3.js";
-import { bytesToHex } from "@noble/hashes/utils.js";
-import { base58 } from "@scure/base";
-import { HDKey } from "@scure/bip32";
+import { computeHmac, decodeBase58, encodeBase58, getBytes, HDNodeWallet, toBeArray } from "ethers";
 
 // Same paths as Fiber's enclave and the public CLI (`packages/cli/src/private-key.ts`).
 const evmPath = (index: number) => `m/44'/60'/0'/0/${index}`;
@@ -29,7 +23,7 @@ export type AddressKind = "evm" | "solana";
 export function addressKind(address: string): AddressKind | null {
   if (/^0x[0-9a-fA-F]{40}$/.test(address)) return "evm";
   try {
-    if (base58.decode(address).length === 32) return "solana";
+    if (base58ToBytes(address).length === 32) return "solana";
   } catch {
     // Not base58.
   }
@@ -44,22 +38,15 @@ export async function findPrivateKey(seed: Uint8Array, address: string): Promise
   const kind = addressKind(address);
   if (kind === "evm") {
     const target = address.toLowerCase();
-    // Every EVM index shares m/44'/60'/0'/0, so derive it once.
-    const parent = HDKey.fromMasterSeed(seed).derive("m/44'/60'/0'/0");
-    try {
-      for (let index = 0; index < MAX_DERIVATION_INDEX; index++) {
-        if (index % 100 === 0) await yieldToPage();
-        const child = parent.deriveChild(index);
-        try {
-          if (evmAddress(child.privateKey!).toLowerCase() === target) {
-            return { network: "EVM", index, path: evmPath(index), privateKey: `0x${bytesToHex(child.privateKey!)}` };
-          }
-        } finally {
-          child.wipePrivateData();
-        }
+    // Every EVM index shares m/44'/60'/0'/0, so derive it once. Fiber derives from the raw seed
+    // bytes (BIP-32 master seed), not from a mnemonic.
+    const parent = HDNodeWallet.fromSeed(seed).derivePath("m/44'/60'/0'/0");
+    for (let index = 0; index < MAX_DERIVATION_INDEX; index++) {
+      if (index % 100 === 0) await yieldToPage();
+      const child = parent.deriveChild(index);
+      if (child.address.toLowerCase() === target) {
+        return { network: "EVM", index, path: evmPath(index), privateKey: child.privateKey };
       }
-    } finally {
-      parent.wipePrivateData();
     }
   }
 
@@ -74,11 +61,11 @@ export async function findPrivateKey(seed: Uint8Array, address: string): Promise
         try {
           const secret = leaf.subarray(0, 32);
           const publicKey = ed25519.getPublicKey(secret);
-          if (base58.encode(publicKey) === address) {
+          if (encodeBase58(publicKey) === address) {
             const secretKey = new Uint8Array(64);
             secretKey.set(secret);
             secretKey.set(publicKey, 32);
-            const privateKey = base58.encode(secretKey);
+            const privateKey = encodeBase58(secretKey);
             secretKey.fill(0);
             return { network: "Solana", index, path: solanaPath(index), privateKey };
           }
@@ -94,15 +81,10 @@ export async function findPrivateKey(seed: Uint8Array, address: string): Promise
   return null;
 }
 
-function evmAddress(privateKey: Uint8Array): string {
-  const publicKey = secp256k1.getPublicKey(privateKey, false);
-  return `0x${bytesToHex(keccak_256(publicKey.subarray(1)).subarray(-20))}`;
-}
-
 /* SLIP-0010 Ed25519: every level is hardened. A node is 64 bytes: key, then chain code. */
 
 function slip10Master(seed: Uint8Array): Uint8Array {
-  return hmac(sha512, SLIP10_ED25519_MASTER_KEY, seed);
+  return getBytes(computeHmac("sha512", SLIP10_ED25519_MASTER_KEY, seed));
 }
 
 /** Derives a hardened child; `wipeParent` clears the parent when the caller no longer needs it. */
@@ -110,10 +92,20 @@ function slip10Child(parent: Uint8Array, segment: number, wipeParent = true): Ui
   const data = new Uint8Array(37);
   data.set(parent.subarray(0, 32), 1);
   new DataView(data.buffer).setUint32(33, (segment | 0x80000000) >>> 0, false);
-  const child = hmac(sha512, parent.subarray(32), data);
+  const child = getBytes(computeHmac("sha512", parent.subarray(32), data));
   data.fill(0);
   if (wipeParent) parent.fill(0);
   return child;
+}
+
+/** Base58 to bytes, keeping leading zero bytes (each written as "1"). */
+function base58ToBytes(value: string): Uint8Array {
+  const zeros = value.match(/^1*/)![0].length;
+  const rest = value.slice(zeros);
+  const body = rest ? toBeArray(decodeBase58(rest)) : new Uint8Array(0);
+  const bytes = new Uint8Array(zeros + body.length);
+  bytes.set(body, zeros);
+  return bytes;
 }
 
 const yieldToPage = () => new Promise((resolve) => setTimeout(resolve, 0));

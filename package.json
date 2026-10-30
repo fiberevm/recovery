@@ -14,18 +14,23 @@
   },
   "dependencies": {
     "@noble/curves": "2.0.1",
-    "@noble/hashes": "2.0.1",
     "@railgun-community/engine": "github:fiberevm/railgun-engine#f569d52",
-    "@scure/base": "2.0.0",
-    "@scure/bip32": "2.0.1",
-    "@scure/bip39": "2.0.1",
     "brotli": "1.3.3",
-    "buffer": "6.0.3",
     "ethers": "6.14.3",
     "memdown": "6.1.1",
     "snarkjs": "0.7.6"
   },
   "overrides": {
-    "micro-ftch": "file:./shims/micro-ftch"
+    "micro-ftch": "file:./shims/micro-ftch",
+    "web3": "file:./shims/unused",
+    "bfj": "file:./shims/unused",
+    "r1csfile": "file:./shims/unused",
+    "ejs": "file:./shims/unused",
+    "@iden3/binfileutils": "file:./shims/unused",
+    "circom_runtime": "file:./shims/unused",
+    "fastfile": "file:./shims/unused",
+    "logplease": "file:./shims/unused",
+    "bn.js": "5.2.5",
+    "ws": "8.21.3"
   }
 }

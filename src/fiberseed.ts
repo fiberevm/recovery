@@ -1,5 +1,3 @@
-import { base64 } from "@scure/base";
-
 // Mirrors `fiber-wallet-export` version 1 from Fiber's shared wallet-export module.
 const PASSWORD_FILE_AAD = new TextEncoder().encode("fiber.wallet-export.password.v1");
 const PASSWORD_KDF_ITERATIONS = 600_000;
@@ -23,8 +21,13 @@ type WalletSeedPayload = {
   seed: string;
 };
 
-/** WebCrypto's types want ArrayBuffer-backed views, so copy out of the decoder's buffer. */
-const decodeBase64 = (value: string) => new Uint8Array(base64.decode(value));
+/** Strict base64 to bytes with the browser's own decoder (atob rejects malformed input). */
+function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
+  const binary = atob(value);
+  const bytes = new Uint8Array(binary.length);
+  for (let index = 0; index < binary.length; index++) bytes[index] = binary.charCodeAt(index);
+  return bytes;
+}
 
 /** Thrown for problems the person can act on, so the UI can show the message as-is. */
 export class RecoveryError extends Error {}
@@ -113,7 +116,7 @@ export async function decryptFiberSeed(file: FiberSeedFile, password: string): P
       throw new RecoveryError("This backup opened, but its contents aren't a Fiber seed.");
     }
 
-    const seed = base64.decode(payload.seed);
+    const seed = decodeBase64(payload.seed);
     if (seed.length < 16 || seed.length > 64) {
       throw new RecoveryError("This backup opened, but its seed is the wrong length.");
     }

@@ -4,8 +4,6 @@
  *
  * Usage: bun scripts/make-fixture.ts [out-path] [password]
  */
-import { hexToBytes } from "@noble/hashes/utils.js";
-import { base64 } from "@scure/base";
 
 const TEST_SEED = "00".repeat(32);
 const out = process.argv[2] ?? "fixtures/test-wallet.fiberseed";
@@ -18,7 +16,7 @@ const payload = new TextEncoder().encode(
     version: 1,
     createdAt,
     encoding: "base64",
-    seed: base64.encode(hexToBytes(TEST_SEED)),
+    seed: Buffer.from(TEST_SEED, "hex").toString("base64"),
   }),
 );
 const salt = crypto.getRandomValues(new Uint8Array(32));
@@ -53,8 +51,8 @@ const file = {
   format: "fiber-wallet-export",
   version: 1,
   createdAt,
-  kdf: { name: "PBKDF2-HMAC-SHA256", iterations: 600_000, salt: base64.encode(salt) },
-  cipher: { name: "AES-256-GCM", nonce: base64.encode(nonce), ciphertext: base64.encode(ciphertext) },
+  kdf: { name: "PBKDF2-HMAC-SHA256", iterations: 600_000, salt: Buffer.from(salt).toString("base64") },
+  cipher: { name: "AES-256-GCM", nonce: Buffer.from(nonce).toString("base64"), ciphertext: Buffer.from(ciphertext).toString("base64") },
 };
 await Bun.write(out, `${JSON.stringify(file, null, 2)}\n`);
 console.log(`Wrote ${out} (password: "${password}")`);

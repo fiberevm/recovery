@@ -10,9 +10,7 @@
  * the test backup. Sending needs a browser wallet connected to the same fork.
  */
 import { ABIRailgunSmartWallet, RailgunEngine, ShieldNoteERC20 } from "@railgun-community/engine";
-import { entropyToMnemonic } from "@scure/bip39";
-import { wordlist } from "@scure/bip39/wordlists/english.js";
-import { Interface } from "ethers";
+import { Interface, Mnemonic } from "ethers";
 import memdown from "memdown";
 
 const RPC = "http://127.0.0.1:8545";
@@ -41,7 +39,7 @@ const send = async (from: string, to: string, data: string) => {
 const erc20 = new Interface(["function transfer(address,uint256)", "function approve(address,uint256)"]);
 
 const engine = await RailgunEngine.initForWallet("shieldfixture", memdown(), {} as any, async () => ({ commitmentEvents: [], unshieldEvents: [], nullifierEvents: [] }), async () => [], async () => true, async () => ({ txidIndex: undefined, merkleroot: undefined }), undefined, false);
-const wallet = await engine.createWalletFromMnemonic("00".repeat(32), entropyToMnemonic(new Uint8Array(32), wordlist), 0);
+const wallet = await engine.createWalletFromMnemonic("00".repeat(32), Mnemonic.fromEntropy(new Uint8Array(32)).phrase, 0);
 const { masterPublicKey, viewingPublicKey } = wallet.addressKeys;
 
 const requests = [];

@@ -1,0 +1,7 @@
+# Supply-chain guards for every `bun install` in this repo.
+[install]
+# Only resolve npm versions published at least 3 days ago (259,200 seconds), so a freshly
+# hijacked release has time to be noticed and pulled before it can reach this page.
+minimumReleaseAge = 259200
+# `bun add` writes exact versions; the lockfile is the source of truth for everything else.
+exact = true

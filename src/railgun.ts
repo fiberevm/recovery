@@ -17,9 +17,7 @@ import {
   type Nullifier,
   type UnshieldStoredEvent,
 } from "@railgun-community/engine";
-import { entropyToMnemonic } from "@scure/bip39";
-import { wordlist } from "@scure/bip39/wordlists/english.js";
-import { getAddress, Interface, type Result } from "ethers";
+import { getAddress, Interface, Mnemonic, type Result } from "ethers";
 import memdown from "memdown";
 import { hasCircuit, loadArtifact, variantName } from "./artifacts";
 import type { RecoveryChain } from "./chains";
@@ -230,7 +228,8 @@ export async function startRecovery({
   for (const state of loaded) creationBlockNumbers[0]![state.chain.id] = state.chain.pool.deploymentBlock;
   const wallet = await engine.createWalletFromMnemonic(
     toHex(encryptionKey),
-    entropyToMnemonic(seed, wordlist),
+    // Fiber's Railgun wallet uses the seed bytes as BIP-39 entropy, like the Fiber CLI.
+    Mnemonic.fromEntropy(seed).phrase,
     0,
     creationBlockNumbers,
   );

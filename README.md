@@ -221,6 +221,20 @@ The Railgun engine was written for Node.js, so the browser build needs a few sta
 
 `bun run dev` serves the built page rather than using Bun's own dev server, because Bun's live-reload connection is blocked by the page's security policy and breaks the page in Safari.
 
+## Supply chain
+
+The page handles wallet keys, so its dependencies are kept small and checked:
+
+- **Six direct dependencies**, all pinned to exact versions: Fiber's fork of the Railgun engine, `ethers` (which the engine requires), `snarkjs`, `memdown`, `brotli` and `@noble/curves`.
+- **Nothing unused is installed.** `package.json` `overrides` replace packages the page never loads (web3 and some snarkjs tooling) with an empty stub that throws if anything ever loads it. That cuts the install from about 470 packages to about 130 without changing what ships.
+- **Only releases at least 3 days old.** `bunfig.toml` sets `minimumReleaseAge`, so a freshly hijacked npm release can't be installed. Every npm package in the lockfile is over 40 days old today.
+- **No install scripts.** No dependency is trusted to run scripts, and the Render build installs with `--ignore-scripts`.
+- **Locked and verified.** Installs use `bun.lock`, which records an integrity hash for every package. The two Railgun forks are pinned to exact commits.
+- **`bun audit` is clean.** Two advisories in packages the engine pulls in (`bn.js`, `ws`) are overridden to patched versions.
+- **Nothing loads from a CDN at runtime.** The page is one file. Proving circuits fetched from IPFS are checked against Railgun's published hashes before use.
+
+Run `bun audit` before each release.
+
 ## License
 
 MIT; see `LICENSE`. The bundled fonts (Geist, Space Grotesk) are under the SIL Open Font License; see `src/fonts/`. The bundled proving circuits are Railgun's.

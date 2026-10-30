@@ -6,7 +6,7 @@ services:
     runtime: static
     repo: https://github.com/fiberevm/recovery
     branch: main
-    buildCommand: bun install --frozen-lockfile && bun run build
+    buildCommand: bun install --frozen-lockfile --ignore-scripts && bun run build
     staticPublishPath: ./dist
     envVars:
       # The version the release build is made and tested with.
