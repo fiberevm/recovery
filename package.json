@@ -1,0 +1,31 @@
+{
+  "name": "fiber-recovery",
+  "version": "0.1.0",
+  "private": true,
+  "type": "module",
+  "description": "Standalone, browser-only recovery for Fiber .fiberseed backups.",
+  "scripts": {
+    "dev": "bun scripts/serve.ts",
+    "build": "bun scripts/build.ts",
+    "fixture": "bun scripts/make-fixture.ts",
+    "typecheck": "bun build --check ./src/app.ts --outdir /tmp/fiber-recovery-check",
+    "snapshot": "bun scripts/snapshot.ts",
+    "artifacts": "bun scripts/artifacts.ts"
+  },
+  "dependencies": {
+    "@noble/curves": "2.0.1",
+    "@noble/hashes": "2.0.1",
+    "@railgun-community/engine": "github:fiberevm/railgun-engine#f569d52",
+    "@scure/base": "2.0.0",
+    "@scure/bip32": "2.0.1",
+    "@scure/bip39": "2.0.1",
+    "brotli": "1.3.3",
+    "buffer": "6.0.3",
+    "ethers": "6.14.3",
+    "memdown": "6.1.1",
+    "snarkjs": "0.7.6"
+  },
+  "overrides": {
+    "micro-ftch": "file:./shims/micro-ftch"
+  }
+}
