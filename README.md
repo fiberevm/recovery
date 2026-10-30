@@ -83,7 +83,15 @@ Then set the Arbitrum RPC to `http://127.0.0.1:8545` under **RPC settings** and 
 
 `render.yaml` is a [Render](https://render.com) Blueprint for https://recovery.fiber.so. It builds the page with Bun and serves `dist/index.html` as a static site, with headers that stop other sites from framing it. In Render, create a Blueprint from this repo's `main` branch, then point `recovery.fiber.so` at the service in DNS as Render instructs. Every push to `main` redeploys.
 
-Refresh the pool snapshots (`bun run snapshot`) and commit them before a release, so scans start from recent history.
+Every push to `main` also publishes the page as a [GitHub Release](https://github.com/fiberevm/recovery/releases) (`.github/workflows/release.yml`). The workflow builds twice to check the build is reproducible, then attaches `fiber-recovery-v<version>.html`, its `.sha256`, and a build-provenance attestation. The version is `package.json`'s major and minor plus `main`'s commit count, so `0.1.7` is the seventh commit. A push that leaves the page byte-identical makes no release. To check a download came from this workflow:
+
+```bash
+gh attestation verify fiber-recovery-v0.1.7.html --repo fiberevm/recovery
+```
+
+docs.fiber.so links one specific release and shows its hash. Update `packages/docs.fiber.so/src/lib/recovery-release.json` in the Fiber repo when you want the docs to offer a newer one.
+
+Refresh the pool snapshots (`bun run snapshot`) and commit them before pushing to `main`, so scans start from recent history.
 
 ## How it works
 
