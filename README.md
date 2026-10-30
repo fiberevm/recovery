@@ -4,7 +4,7 @@ Get your money out of Fiber using only your backup file, even if Fiber's app and
 
 Fiber Recovery is a single web page. You give it your `.fiberseed` backup and its password, and it can:
 
-- **Find your private holdings.** It scans Fiber's private pools on Arbitrum, Base and BNB Chain as soon as you unlock, and lists what you own in them.
+- **Find your private holdings.** It scans Fiber's private pools on Ethereum, Arbitrum, Base and BNB Chain as soon as you unlock, and lists what you own in them.
 - **Send them out.** Move a private balance to any address on the same chain. Your own browser wallet (MetaMask, Rabby, …) pays the gas.
 - **Recover private keys.** Paste one of your wallet addresses and it shows that address's private key, so you can import it into another wallet such as MetaMask or Phantom.
 
@@ -32,7 +32,7 @@ Anyone who sees a private key can take everything at that address. Never share i
    - **Private key recovery:** paste an address (`0x…` for EVM networks, or a Solana address) and press **Find private key**. The key is blurred until you press **Reveal**.
 6. Press **Lock** when you're done. Closing the tab also clears everything.
 
-Sending moves funds out of Fiber's private pool to a public address, on the same chain. You need a little ETH (Arbitrum, Base) or BNB (BNB Chain) in your browser wallet for gas.
+Sending moves funds out of Fiber's private pool to a public address, on the same chain. You need a little ETH (Ethereum, Arbitrum, Base) or BNB (BNB Chain) in your browser wallet for gas. Gas on Ethereum costs much more than on the other chains.
 
 You get the `.fiberseed` file from the Fiber app, under Settings → Export wallet.
 
@@ -134,6 +134,7 @@ Code: `src/railgun.ts` (`prepareUnshield`), `src/artifacts.ts` (circuits), `src/
 
 | Chain | Fiber pool | Default server (RPC) |
 | --- | --- | --- |
+| Ethereum | `0xc835F7252338E1A7a533927C64fC148D6A940C5F` | `https://mainnet.gateway.tenderly.co` |
 | Arbitrum | `0x7233d17ec3Ce855Acb8F7A9412Bf90757117A092` | `https://arb1.arbitrum.io/rpc` |
 | Base | `0x22F45899EE13042ae046f7Aa7C2292Ea74C7F1c6` | `https://base.gateway.tenderly.co` |
 | BNB Chain | `0x7233d17ec3Ce855Acb8F7A9412Bf90757117A092` | `https://bsc.rpc.blxrbdn.com` |
@@ -142,7 +143,7 @@ Arbitrum and BNB Chain share a pool address; the page always picks the pool by c
 
 Most free servers refuse to return old history, or only return a few blocks at a time. The defaults are the free servers that worked in testing:
 
-- **Arbitrum:** fast, with large ranges. A scan takes seconds.
+- **Ethereum and Arbitrum:** fast, with large ranges. A scan takes seconds.
 - **Base:** 1,000 blocks per request and about 10 requests a second.
 - **BNB Chain:** 5,000 blocks per request, but slow (1–4 seconds each).
 
@@ -158,15 +159,15 @@ A snapshot only covers blocks that are final, so it can't be undone by a chain r
 
 ```bash
 bun run snapshot                     # add new blocks to every snapshot
-bun run snapshot --only base         # one chain: arbitrum, base or bnb
+bun run snapshot --only base         # one chain: ethereum, arbitrum, base or bnb
 bun run snapshot --full              # start over from each pool's first block
-bun run snapshot --bnb-rpc <url>     # use another server (also --arbitrum-rpc, --base-rpc)
+bun run snapshot --bnb-rpc <url>     # use another server (also --ethereum-rpc, --arbitrum-rpc, --base-rpc)
 ```
 
 The free servers make a full rebuild slow (Base takes about 14 minutes). A paid RPC is much faster; the BNB Chain snapshot took 34 seconds on QuickNode. Pass keyed URLs through environment variables, which keeps them out of your shell history and the script's output:
 
 ```bash
-BNB_RPC_URL=… BASE_RPC_URL=… ARBITRUM_RPC_URL=… bun run snapshot
+ETHEREUM_RPC_URL=… BNB_RPC_URL=… BASE_RPC_URL=… ARBITRUM_RPC_URL=… bun run snapshot
 ```
 
 The snapshot files only contain public pool history. No RPC URL is ever written to them.
@@ -181,7 +182,9 @@ src/
   app.ts              Page logic: file drop, unlock, both sections
   fiberseed.ts        Reading and unlocking .fiberseed files
   derive.ts           Address and private key derivation
-  chains.ts           Pools, default servers and token names per chain
+  chains.ts           Pools and default servers per chain
+  tokens.ts           Token names per chain, from Fiber's token registry
+  network-icons.ts    Network icons
   railgun.ts          Private holdings scan and sends (Railgun engine)
   pool-logs.ts        Fetching pool history from a server
   snapshots.ts        Loading saved pool history

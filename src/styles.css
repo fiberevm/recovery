@@ -547,14 +547,38 @@ p {
 
 .holdings__head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
   gap: 12px;
+}
+
+.holdings__name,
+.field__label--network {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .holdings__name {
   font-size: 14px;
   font-weight: 600;
+}
+
+.network-icon {
+  display: inline-flex;
+  width: 18px;
+  height: 18px;
+  flex: 0 0 auto;
+}
+
+.field__label--network .network-icon {
+  width: 16px;
+  height: 16px;
+}
+
+.network-icon svg {
+  width: 100%;
+  height: 100%;
 }
 
 .holdings__status,

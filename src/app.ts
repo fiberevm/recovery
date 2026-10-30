@@ -1,5 +1,6 @@
 import { ARTIFACT_GATEWAY, BUNDLED_VARIANTS } from "./artifact-variants";
 import { connect, listBrowserWallets, sendTransaction, waitForReceipt } from "./browser-wallet";
+import { networkIcon } from "./network-icons";
 import { RECOVERY_CHAINS, type RecoveryChain, type Token } from "./chains";
 import { addressKind, findPrivateKey, MAX_DERIVATION_INDEX } from "./derive";
 import {
@@ -185,7 +186,8 @@ function setUnlocking(next: boolean) {
 
 for (const chain of RECOVERY_CHAINS) {
   const field = element("div", "field");
-  const label = element("label", "field__label", `${chain.name} RPC`);
+  const label = element("label", "field__label field__label--network");
+  label.append(networkIcon(chain.slug), `${chain.name} RPC`);
   label.htmlFor = `rpc-${chain.id}`;
   const input = element("input", "field__input field__input--mono");
   input.id = `rpc-${chain.id}`;
@@ -278,7 +280,9 @@ function chainRow(chain: RecoveryChain, rpcUrl: URL, scanSession: number): Chain
   const group = element("section", "holdings__group");
   const head = element("div", "holdings__head");
   const status = element("span", "holdings__status", "Starting…");
-  head.append(element("span", "holdings__name", chain.name), status);
+  const name = element("span", "holdings__name");
+  name.append(networkIcon(chain.slug), chain.name);
+  head.append(name, status);
   const bar = element("div", "progress");
   const fill = element("div", "progress__fill");
   bar.append(fill);

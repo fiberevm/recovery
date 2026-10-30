@@ -6,6 +6,7 @@ import type { RecoveryChain } from "./chains";
 import type { RawLog } from "./pool-logs";
 import arbitrum from "./snapshots/arbitrum.json";
 import base from "./snapshots/base.json";
+import ethereum from "./snapshots/ethereum.json";
 import bnb from "./snapshots/bnb.json";
 
 /** One log as [block, logIndex, transactionHash, topics, data]; tuples keep the page smaller. */
@@ -23,7 +24,7 @@ export type PoolSnapshotFile = {
 
 export type PoolSnapshot = { fromBlock: number; toBlock: number; createdAt: string; logs: RawLog[] };
 
-const FILES = [arbitrum, base, bnb] as PoolSnapshotFile[];
+const FILES = [ethereum, arbitrum, base, bnb] as PoolSnapshotFile[];
 
 /** Returns the bundled history for a chain's pool, or null if none matches it. */
 export function getPoolSnapshot(chain: RecoveryChain): PoolSnapshot | null {
