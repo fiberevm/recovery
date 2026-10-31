@@ -89,7 +89,7 @@ Every push to `main` also publishes the page as a [GitHub Release](https://githu
 gh attestation verify fiber-recovery-v0.1.7.html --repo fiberevm/recovery
 ```
 
-docs.fiber.so links one specific release and shows its hash. Update `packages/docs.fiber.so/src/lib/recovery-release.json` in the Fiber repo when you want the docs to offer a newer one.
+docs.fiber.so links to the [latest release](https://github.com/fiberevm/recovery/releases/latest), so the release notes are the one place each file's hash is published.
 
 Refresh the pool snapshots (`bun run snapshot`) and commit them before pushing to `main`, so scans start from recent history.
 
