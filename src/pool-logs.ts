@@ -10,12 +10,27 @@ export type RawLog = {
   data: string;
 };
 
+/** Largest window asked of an RPC, so one slow server can't hold up much of a scan. */
+const MAX_SPAN = 50_000;
+/** Failures in a row before an RPC is dropped from a scan. */
+const MAX_STRIKES = 30;
+/** With other RPCs to turn to, a window that takes longer than this goes back in the queue. */
+const POOLED_TIMEOUT_MS = 5_000;
+/** An RPC further behind the newest one than this sits out the scan. */
+const MAX_LAG_BLOCKS = 32;
+/** How long the other RPCs get to report their head once the first has answered. */
+const HEAD_GRACE_MS = 1_500;
+
+const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
+
 /**
- * Reads every pool log in [from, to]. Free RPCs cap ranges anywhere from 1k to millions of
- * blocks, so windows start large, split in half when refused, and run a few at a time.
+ * Reads every pool log in [from, to] across all the given RPCs. Workers share one queue, so faster
+ * servers take more of the windows. Free RPCs cap ranges anywhere from 1k to millions of blocks,
+ * so each server's windows start large and split in half when refused. A window a server fails
+ * goes back in the queue for any other; the read only fails once every server has been dropped.
  */
 export async function fetchPoolLogs(
-  rpcUrl: URL,
+  rpcUrls: URL[],
   address: string,
   from: number,
   to: number,
@@ -24,41 +39,71 @@ export async function fetchPoolLogs(
   const total = to - from + 1;
   let done = 0;
   onProgress(0);
-  let span = 500_000;
-  const queue: Array<[number, number]> = [];
-  for (let start = from; start <= to; start += span) queue.push([start, Math.min(to, start + span - 1)]);
+  const queue: Array<[number, number]> = [[from, to]];
 
   const logs: RawLog[] = [];
-  const pacer = new Pacer();
-  const worker = async () => {
-    while (queue.length) {
-      const [start, end] = queue.shift()!;
-      // Once an RPC has refused a size, don't keep asking for it.
-      if (end - start + 1 > span) {
-        const middle = start + span - 1;
-        queue.unshift([start, middle], [middle + 1, end]);
+  const timeoutMs = rpcUrls.length > 1 ? POOLED_TIMEOUT_MS : undefined;
+  let failure: unknown;
+  const worker = async (endpoint: Endpoint) => {
+    while (done < total && endpoint.strikes < MAX_STRIKES) {
+      // Waits before taking a window, so servers that are ready get to it first.
+      await endpoint.pacer.wait();
+      const next = queue.shift();
+      if (!next) {
+        // The rest is with other workers, and they may hand some of it back.
+        await sleep(50);
         continue;
       }
+      const start = next[0];
+      let end = next[1];
+      // Once an RPC has refused a size, don't keep asking for it.
+      if (end - start + 1 > endpoint.span) {
+        queue.unshift([start + endpoint.span, end]);
+        end = start + endpoint.span - 1;
+      }
       try {
-        logs.push(...(await getLogsWithRetry(rpcUrl, pacer, address, start, end)));
+        const params = [{ address, fromBlock: `0x${start.toString(16)}`, toBlock: `0x${end.toString(16)}` }];
+        logs.push(...(await rpc<RawLog[]>(endpoint.url, "eth_getLogs", params, timeoutMs)));
+        endpoint.pacer.speedUp();
+        endpoint.strikes = 0;
         done += end - start + 1;
         onProgress(done / total);
       } catch (caught) {
-        if (!(caught instanceof RangeRefused) || end === start) throw caught;
-        // Use the limit when the RPC states it ("maximum 1000 blocks"); otherwise halve and retry.
-        const stated = caught.maxBlocks;
-        const next = stated && stated < end - start + 1 ? stated : Math.floor((end - start + 1) / 2);
-        span = Math.min(span, Math.max(1, next));
         queue.unshift([start, end]);
+        endpoint.strikes++;
+        const message = caught instanceof Error ? caught.message.toLowerCase() : "";
+        if (/429|rate|too many|limit reached|exceeded/.test(message) && !/range|blocks/.test(message)) {
+          endpoint.pacer.slowDown();
+          failure = new RecoveryError("The RPCs kept rate-limiting the scan. Try again later or use your own RPC.");
+        } else {
+          failure = new RangeRefused(message);
+          // A server that can't return a single block has nothing to offer.
+          if (end === start) endpoint.strikes = MAX_STRIKES;
+          // Use the limit when the RPC states it ("maximum 1000 blocks"); otherwise halve and retry.
+          const stated = (failure as RangeRefused).maxBlocks;
+          const size = stated && stated < end - start + 1 ? stated : Math.floor((end - start + 1) / 2);
+          endpoint.span = Math.min(endpoint.span, Math.max(1, size));
+        }
+        await sleep(Math.min(1_000, endpoint.strikes * 100));
       }
     }
   };
-  await Promise.all(Array.from({ length: 6 }, worker));
+  // One RPC gets six workers, as many gets two each.
+  const perEndpoint = Math.max(2, Math.ceil(6 / rpcUrls.length));
+  await Promise.all(
+    rpcUrls.flatMap((url) => {
+      const endpoint: Endpoint = { url, span: MAX_SPAN, strikes: 0, pacer: new Pacer() };
+      return Array.from({ length: perEndpoint }, () => worker(endpoint));
+    }),
+  );
+  if (done < total) throw failure;
 
   return logs.sort(
     (a, b) => Number(a.blockNumber) - Number(b.blockNumber) || Number(a.logIndex) - Number(b.logIndex),
   );
 }
+
+type Endpoint = { url: URL; span: number; strikes: number; pacer: Pacer };
 
 class RangeRefused extends Error {
   /** The block limit the RPC named in its error, if it named one. */
@@ -78,7 +123,7 @@ class RangeRefused extends Error {
  * so the gap widens on each rate-limit error and narrows again as requests succeed.
  */
 class Pacer {
-  // Tenderly's free Base endpoint, the slowest default, sustains about 10–12 requests a second.
+  // About 16 requests a second to start with, which most free RPCs sustain.
   private gapMs = 60;
   private nextAt = 0;
 
@@ -99,45 +144,38 @@ class Pacer {
   }
 }
 
-async function getLogsWithRetry(
-  rpcUrl: URL,
-  pacer: Pacer,
-  address: string,
-  start: number,
-  end: number,
-): Promise<RawLog[]> {
-  for (let attempt = 0; ; attempt++) {
-    await pacer.wait();
-    try {
-      const logs = await rpc<RawLog[]>(rpcUrl, "eth_getLogs", [
-        { address, fromBlock: `0x${start.toString(16)}`, toBlock: `0x${end.toString(16)}` },
-      ]);
-      pacer.speedUp();
-      return logs;
-    } catch (caught) {
-      const message = caught instanceof Error ? caught.message.toLowerCase() : "";
-      const rateLimited = /429|rate|too many|limit reached|exceeded/.test(message) && !/range|blocks/.test(message);
-      if (!rateLimited) throw new RangeRefused(message);
-      if (attempt >= 30) {
-        throw new RecoveryError("The RPC kept rate-limiting the scan. Try again later or use your own RPC.");
-      }
-      pacer.slowDown();
-    }
-  }
+/**
+ * Keeps the RPCs that answer and are caught up, fastest first. Public servers trail each other by
+ * a few blocks and many return an empty list for blocks they don't have yet, so `head` is the
+ * newest block all of the returned RPCs have.
+ */
+export async function liveRpcs(rpcUrls: URL[]): Promise<{ rpcUrls: URL[]; head: number }> {
+  const answers: Array<{ url: URL; head: number }> = [];
+  const asks = rpcUrls.map(async (url) => void answers.push({ url, head: await rpcBlockNumber(url) }));
+  await Promise.any(asks);
+  await Promise.race([Promise.allSettled(asks), sleep(HEAD_GRACE_MS)]);
+
+  const newest = Math.max(...answers.map((answer) => answer.head));
+  const live = answers.filter((answer) => answer.head >= newest - MAX_LAG_BLOCKS);
+  return { rpcUrls: live.map((answer) => answer.url), head: Math.min(...live.map((answer) => answer.head)) };
 }
 
 export async function rpcBlockNumber(rpcUrl: URL): Promise<number> {
   return Number.parseInt(await rpc<string>(rpcUrl, "eth_blockNumber", []), 16);
 }
 
-export async function rpc<T>(rpcUrl: URL, method: string, params: unknown[]): Promise<T> {
+export async function rpc<T>(rpcUrl: URL, method: string, params: unknown[], timeoutMs = 30_000): Promise<T> {
   const response = await fetch(rpcUrl, {
     method: "POST",
     headers: { "content-type": "application/json" },
     body: JSON.stringify({ jsonrpc: "2.0", id: 1, method, params }),
-    signal: AbortSignal.timeout(30_000),
+    signal: AbortSignal.timeout(timeoutMs),
   });
-  if (!response.ok) throw new Error(`HTTP ${response.status}`);
+  if (!response.ok) {
+    // Some servers send their block limit as a 429 ("limited to 1000 blocks"), so keep the reason.
+    const body = (await response.json().catch(() => null)) as { message?: string; error?: { message?: string } } | null;
+    throw new Error(`HTTP ${response.status} ${body?.error?.message ?? body?.message ?? ""}`);
+  }
   const payload = (await response.json()) as { result?: T; error?: { message?: string; data?: unknown } };
   if (payload.error || payload.result === undefined) {
     throw new Error(`${payload.error?.message ?? "No result"} ${JSON.stringify(payload.error?.data ?? "")}`);
@@ -145,8 +183,30 @@ export async function rpc<T>(rpcUrl: URL, method: string, params: unknown[]): Pr
   return payload.result;
 }
 
-/** The newest block the chain considers final, so a snapshot can never be undone by a reorg. */
-export async function rpcFinalizedBlock(rpcUrl: URL): Promise<number> {
-  const block = await rpc<{ number: string }>(rpcUrl, "eth_getBlockByNumber", ["finalized", false]);
-  return Number.parseInt(block.number, 16);
+/** Asks each RPC in turn until one answers, for calls any of them can serve. */
+export async function rpcAny<T>(rpcUrls: URL[], method: string, params: unknown[]): Promise<T> {
+  let failure: unknown;
+  for (const rpcUrl of rpcUrls) {
+    try {
+      return await rpc<T>(rpcUrl, method, params);
+    } catch (caught) {
+      failure ??= caught;
+    }
+  }
+  throw failure;
+}
+
+/**
+ * The newest block every RPC considers final, so a snapshot can never be undone by a reorg.
+ * Some public servers report their head as final, so the lowest answer wins.
+ */
+export async function rpcFinalizedBlock(rpcUrls: URL[]): Promise<number> {
+  const answers = await Promise.allSettled(
+    rpcUrls.map((rpcUrl) => rpc<{ number: string }>(rpcUrl, "eth_getBlockByNumber", ["finalized", false])),
+  );
+  const blocks = answers.flatMap((answer) =>
+    answer.status === "fulfilled" ? [Number.parseInt(answer.value.number, 16)] : [],
+  );
+  if (!blocks.length) throw new Error("No RPC reported a finalized block");
+  return Math.min(...blocks);
 }

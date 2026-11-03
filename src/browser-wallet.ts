@@ -2,7 +2,7 @@
 // Its requests go through the extension, not this page's network, and this page never sees its keys.
 import type { RecoveryChain } from "./chains";
 import { RecoveryError } from "./fiberseed";
-import { rpc } from "./pool-logs";
+import { rpcAny } from "./pool-logs";
 
 type Eip1193Provider = {
   request(args: { method: string; params?: unknown[] }): Promise<unknown>;
@@ -45,13 +45,13 @@ export async function connect(wallet: BrowserWallet): Promise<string> {
 export async function sendTransaction(
   wallet: BrowserWallet,
   chain: RecoveryChain,
-  rpcUrl: URL,
+  rpcUrls: URL[],
   from: string,
   transaction: { to: string; data: string },
 ): Promise<string> {
   let estimate: bigint;
   try {
-    estimate = BigInt(await rpc<string>(rpcUrl, "eth_estimateGas", [{ from, ...transaction }]));
+    estimate = BigInt(await rpcAny<string>(rpcUrls, "eth_estimateGas", [{ from, ...transaction }]));
   } catch (caught) {
     // A failed estimate means the transaction would revert; say so before asking the wallet.
     const reason = caught instanceof Error ? caught.message.trim() : "";
@@ -67,10 +67,10 @@ export async function sendTransaction(
  * Waits for a transaction through the page's own RPC, so the result doesn't rely on the wallet.
  * Throws if the transaction reverted.
  */
-export async function waitForReceipt(rpcUrl: URL, hash: string, timeoutMs = 10 * 60_000): Promise<void> {
+export async function waitForReceipt(rpcUrls: URL[], hash: string, timeoutMs = 10 * 60_000): Promise<void> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
-    const receipt = await rpc<{ status: string } | null>(rpcUrl, "eth_getTransactionReceipt", [hash]).catch(() => null);
+    const receipt = await rpcAny<{ status: string } | null>(rpcUrls, "eth_getTransactionReceipt", [hash]).catch(() => null);
     if (receipt) {
       if (receipt.status !== "0x1") throw new RecoveryError("The transaction failed on-chain. Nothing was sent.");
       return;
@@ -92,7 +92,7 @@ async function switchChain(wallet: BrowserWallet, chain: RecoveryChain) {
         chainId,
         chainName: chain.name,
         nativeCurrency: { name: chain.nativeSymbol, symbol: chain.nativeSymbol, decimals: 18 },
-        rpcUrls: [chain.defaultRpc],
+        rpcUrls: chain.defaultRpcs,
         blockExplorerUrls: [chain.explorer],
       },
     ]);

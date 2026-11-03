@@ -5,12 +5,13 @@
  *
  * Usage: bun scripts/snapshot.ts [--full] [--only <slug>] [--arbitrum-rpc URL] [--base-rpc URL] [--bnb-rpc URL]
  *
- * RPCs can also come from ARBITRUM_RPC_URL, BASE_RPC_URL and BNB_RPC_URL (omni's names), which
- * keeps keyed URLs out of shell history. Keyed URLs are never printed.
+ * Without one, a chain reads from all its public defaults. RPCs can also come from ETHEREUM_RPC_URL,
+ * ARBITRUM_RPC_URL, BASE_RPC_URL and BNB_RPC_URL (omni's names), which keeps keyed URLs out of shell
+ * history. Keyed URLs are never printed.
  */
 import { resolve } from "node:path";
 import { RECOVERY_CHAINS } from "../src/chains";
-import { fetchPoolLogs, rpcFinalizedBlock } from "../src/pool-logs";
+import { fetchPoolLogs, liveRpcs, rpcFinalizedBlock } from "../src/pool-logs";
 import type { PoolSnapshotFile, SnapshotLog } from "../src/snapshots";
 
 const args = process.argv.slice(2);
@@ -25,9 +26,9 @@ for (const chain of RECOVERY_CHAINS.filter((candidate) => !only || candidate.slu
   const key = chain.slug;
   const path = resolve(import.meta.dir, `../src/snapshots/${key}.json`);
   const custom = option(`--${key}-rpc`) ?? process.env[`${key.toUpperCase()}_RPC_URL`];
-  const rpcUrl = new URL(custom ?? chain.defaultRpc);
+  const live = await liveRpcs(custom ? [new URL(custom)] : chain.defaultRpcs.map((url) => new URL(url)));
   // Provider URLs often carry an API key, so only name the public defaults.
-  const via = custom ? "your RPC" : rpcUrl.host;
+  const via = custom ? "your RPC" : `${live.rpcUrls.length} public RPCs`;
 
   const existing = full ? null : await readSnapshot(path);
   const usable =
@@ -38,7 +39,7 @@ for (const chain of RECOVERY_CHAINS.filter((candidate) => !only || candidate.slu
   const fromBlock = usable ? existing.toBlock + 1 : chain.pool.deploymentBlock;
   const logs: SnapshotLog[] = usable ? existing.logs : [];
 
-  const toBlock = await rpcFinalizedBlock(rpcUrl);
+  const toBlock = Math.min(await rpcFinalizedBlock(live.rpcUrls), live.head);
   if (toBlock < fromBlock) {
     console.log(`${chain.name}: already at finalized block ${toBlock.toLocaleString()}`);
     continue;
@@ -47,7 +48,7 @@ for (const chain of RECOVERY_CHAINS.filter((candidate) => !only || candidate.slu
   console.log(`${chain.name}: blocks ${fromBlock.toLocaleString()}–${toBlock.toLocaleString()} via ${via}`);
   const started = Date.now();
   let lastStep = -1;
-  const fresh = await fetchPoolLogs(rpcUrl, chain.pool.proxy, fromBlock, toBlock, (fraction) => {
+  const fresh = await fetchPoolLogs(live.rpcUrls, chain.pool.proxy, fromBlock, toBlock, (fraction) => {
     const step = Math.floor(fraction * 10);
     if (step !== lastStep) {
       lastStep = step;

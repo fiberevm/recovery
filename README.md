@@ -14,7 +14,7 @@ Hosted at **https://recovery.fiber.so**. Source: **https://github.com/fiberevm/r
 
 - **Your backup and password never leave your browser.** Everything is decrypted and computed on your device.
 - **Key recovery works offline.** It never touches the network.
-- **The page only talks to the servers you choose.** The servers (RPCs) are listed under **RPC settings** before you unlock. When the scan starts, the page locks itself so it can only connect to those servers, plus one IPFS gateway (`ipfs-lb.com`) for proving files a send may need. The servers see that someone read a pool's public history, never your keys or which funds are yours.
+- **The page only talks to the servers you choose.** The servers (RPCs) are listed under **RPC settings** before you unlock. By default that's several public servers per chain, used together for speed; replace the list to use only your own. When the scan starts, the page locks itself so it can only connect to those servers, plus one IPFS gateway (`ipfs-lb.com`) for proving files a send may need. The servers see your IP address and that someone read a pool's public history, never your keys or which funds are yours.
 - **Sending never exposes your backup.** The page makes the zero-knowledge proof itself and hands your browser wallet a finished transaction to submit. The wallet pays gas, and never sees the backup or its keys.
 - **The page can't be lied to quietly.** After rebuilding a pool's history, the page checks the result against the pool's live contract. If a server leaves out or changes anything, the scan fails with an error instead of showing an empty wallet.
 - **Check the address bar.** The real page is only ever served from `https://recovery.fiber.so`. You can also download it and open it from your own computer (see below).
@@ -25,7 +25,7 @@ Anyone who sees a private key can take everything at that address. Never share i
 
 1. Open https://recovery.fiber.so, or your own copy of `index.html`.
 2. Drop your `.fiberseed` file on the page, or click to choose it. A green checkmark means the file was read.
-3. Optional: open **RPC settings** to replace the default servers with your own.
+3. Optional: open **RPC settings** to replace the default servers with your own (one URL per line).
 4. Enter the password you set when you exported the backup, then press **Unlock**. Scanning starts right away.
 5. Choose what you need:
    - **Private holdings:** each chain lists what you hold. To move a balance out, press **Send**, enter the address to send to and the amount (**Max** sends everything), pick the browser wallet that will pay gas, and press **Send**. Approve the transaction in your wallet. When it confirms, the page shows a link to the block explorer and refreshes the balance.
@@ -140,28 +140,24 @@ Code: `src/railgun.ts` (`prepareUnshield`), `src/artifacts.ts` (circuits), `src/
 
 ### Pools and servers
 
-| Chain | Fiber pool | Default server (RPC) |
-| --- | --- | --- |
-| Ethereum | `0xc835F7252338E1A7a533927C64fC148D6A940C5F` | `https://mainnet.gateway.tenderly.co` |
-| Arbitrum | `0x7233d17ec3Ce855Acb8F7A9412Bf90757117A092` | `https://arb1.arbitrum.io/rpc` |
-| Base | `0x22F45899EE13042ae046f7Aa7C2292Ea74C7F1c6` | `https://base.gateway.tenderly.co` |
-| BNB Chain | `0x7233d17ec3Ce855Acb8F7A9412Bf90757117A092` | `https://bsc.rpc.blxrbdn.com` |
+| Chain | Fiber pool |
+| --- | --- |
+| Ethereum | `0xc835F7252338E1A7a533927C64fC148D6A940C5F` |
+| Arbitrum | `0x7233d17ec3Ce855Acb8F7A9412Bf90757117A092` |
+| Base | `0x22F45899EE13042ae046f7Aa7C2292Ea74C7F1c6` |
+| BNB Chain | `0x7233d17ec3Ce855Acb8F7A9412Bf90757117A092` |
 
 Arbitrum and BNB Chain share a pool address; the page always picks the pool by chain. These come from omni's `packages/shared/asset-definitions/railgun.ts` and are set in `src/chains.ts`.
 
-Most free servers refuse to return old history, or only return a few blocks at a time. The defaults are the free servers that worked in testing:
+The default servers are in the same file, as a list per chain taken from [Chainlist](https://chainlist.org/rpcs.json). Most listed servers don't suit this page: many refuse browser requests or old history, and some answer log queries with an empty list instead of an error. The defaults are the ones that returned the right logs from a browser origin in testing, so test a new server against a block range known to hold logs before adding it.
 
-- **Ethereum and Arbitrum:** fast, with large ranges. A scan takes seconds.
-- **Base:** 1,000 blocks per request and about 10 requests a second.
-- **BNB Chain:** 5,000 blocks per request, but slow (1–4 seconds each).
-
-The page reads each server's limits from its error messages and slows down when it is rate-limited. If you have your own RPC (Alchemy, QuickNode, etc.), paste it in for a faster scan.
+A scan first drops servers that don't answer or are behind the others, then hands out block ranges from a shared queue, so faster servers do more of the work. The page reads each server's limits from its error messages, slows down when it is rate-limited, and moves a range to another server when one fails or takes too long. If you have your own RPC (Alchemy, QuickNode, etc.), you can paste it in instead.
 
 ### Pool snapshots
 
-Reading years of blocks from a free server is slow; Base's full history takes about 14 minutes. To avoid that, the page ships with each pool's history saved up to a recent block, in `src/snapshots/<chain>.json`. A scan replays the snapshot and only asks the server for newer blocks.
+Reading a pool's whole history from free servers is slow. To avoid that, the page ships with each pool's history saved up to a recent block, in `src/snapshots/<chain>.json`. A scan replays the snapshot and only asks the server for newer blocks.
 
-The snapshot doesn't have to be trusted. The final check against the live contract catches any missing or changed history.
+The snapshot doesn't have to be trusted. The final checks against the live contract, on the merkle root and the number of leaves, catch any missing or changed history.
 
 A snapshot only covers blocks that are final, so it can't be undone by a chain reorganization. Refresh the snapshots before each release:
 
@@ -172,7 +168,7 @@ bun run snapshot --full              # start over from each pool's first block
 bun run snapshot --bnb-rpc <url>     # use another server (also --ethereum-rpc, --arbitrum-rpc, --base-rpc)
 ```
 
-The free servers make a full rebuild slow (Base takes about 14 minutes). A paid RPC is much faster; the BNB Chain snapshot took 34 seconds on QuickNode. Pass keyed URLs through environment variables, which keeps them out of your shell history and the script's output:
+Without a flag, each chain reads from all its default servers. A full rebuild is slower, because few free servers reach the oldest blocks. A paid RPC is much faster; the BNB Chain snapshot took 34 seconds on QuickNode. Pass keyed URLs through environment variables, which keeps them out of your shell history and the script's output:
 
 ```bash
 ETHEREUM_RPC_URL=… BNB_RPC_URL=… BASE_RPC_URL=… ARBITRUM_RPC_URL=… bun run snapshot
@@ -180,7 +176,7 @@ ETHEREUM_RPC_URL=… BNB_RPC_URL=… BASE_RPC_URL=… ARBITRUM_RPC_URL=… bun r
 
 The snapshot files only contain public pool history. No RPC URL is ever written to them.
 
-The older a snapshot is, the more a scan has to fetch live from the free servers. Each day it ages adds roughly 4 seconds to a Base scan; BNB Chain's free server is slower. With fresh snapshots, scanning all three chains takes a few seconds.
+The older a snapshot is, the more a scan has to fetch live from the free servers. With fresh snapshots, scanning all four chains takes a few seconds.
 
 ## Project layout
 

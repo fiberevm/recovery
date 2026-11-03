@@ -22,7 +22,7 @@ import memdown from "memdown";
 import { hasCircuit, loadArtifact, variantName } from "./artifacts";
 import type { RecoveryChain } from "./chains";
 import { RecoveryError } from "./fiberseed";
-import { fetchPoolLogs, rpcBlockNumber, type RawLog } from "./pool-logs";
+import { fetchPoolLogs, liveRpcs, rpcAny, rpcBlockNumber, type RawLog } from "./pool-logs";
 import { getPoolSnapshot } from "./snapshots";
 
 export type PrivateHolding = {
@@ -44,7 +44,7 @@ const TOKEN_TYPE_NAMES: Record<number, PrivateHolding["type"]> = {
 const POOL_EVENTS = new Set(["Shield", "Transact", "Unshield", "Nullified"]);
 const poolInterface = new Interface(ABIRailgunSmartWallet);
 
-export type ScanTarget = { chain: RecoveryChain; rpcUrl: URL };
+export type ScanTarget = { chain: RecoveryChain; rpcUrls: URL[] };
 
 export type SendProgress = { phase: "proving"; fraction: number; circuit: string } | { phase: "building" };
 
@@ -81,8 +81,8 @@ const TXID_VERSION = TXIDVersion.V2_PoseidonMerkle;
  * Rebuilds Fiber's Railgun wallet and reports spendable private holdings per chain as each scan
  * finishes. Pool history comes from the bundled snapshot plus RPC logs for newer blocks, and is
  * handed to the engine through its quick-sync hook; the engine then decrypts notes locally and
- * checks the rebuilt merkle roots against the pool contract, so a truncated or altered history
- * fails instead of reading as empty.
+ * checks the rebuilt merkle roots against the pool contract, and the leaf count is checked against
+ * the contract too, so a truncated or altered history fails instead of reading as empty.
  *
  * One engine serves every chain: the engine keeps contracts in a process-wide store, and
  * unloading any engine unloads every chain's contracts. It stays loaded for sends until `close`.
@@ -101,14 +101,22 @@ export async function startRecovery({
   onError: (chain: RecoveryChain, error: unknown) => void;
 }): Promise<RecoverySession> {
   const states = new Map<number, ChainState>(
-    targets.map((target) => [
-      target.chain.id,
-      {
-        ...target,
-        railgunChain: { type: 0, id: target.chain.id },
-        provider: new PollingJsonRpcProvider(target.rpcUrl.href, target.chain.id, 10_000),
-      },
-    ]),
+    await Promise.all(
+      targets.map(async (target): Promise<[number, ChainState]> => {
+        // The engine holds a single provider, so it gets whichever server answers first.
+        const fastest = await Promise.any(
+          target.rpcUrls.map(async (rpcUrl) => (await rpcBlockNumber(rpcUrl), rpcUrl)),
+        ).catch(() => target.rpcUrls[0]!);
+        return [
+          target.chain.id,
+          {
+            ...target,
+            railgunChain: { type: 0, id: target.chain.id },
+            provider: new PollingJsonRpcProvider(fastest.href, target.chain.id, 10_000),
+          },
+        ];
+      }),
+    ),
   );
   // Encrypts the engine's in-memory wallet store; needed again for every proof.
   const encryptionKey = crypto.getRandomValues(new Uint8Array(32));
@@ -137,25 +145,27 @@ export async function startRecovery({
       async (txidVersion, railgunChain, startingBlock) => {
         const state = states.get(railgunChain.id)!;
         try {
-          const { chain, rpcUrl } = state;
+          const { chain } = state;
           const from = Math.max(startingBlock ?? 0, chain.pool.deploymentBlock);
           // Bundled history covers most blocks; the RPC is asked only for what came after it.
           const snapshot = getPoolSnapshot(chain);
           const snapshotLogs = snapshot ? snapshot.logs.filter((log) => Number(log.blockNumber) >= from) : [];
           const liveFrom = snapshot ? Math.max(from, snapshot.toBlock + 1) : from;
 
-          const head = await rpcBlockNumber(rpcUrl);
+          const { rpcUrls, head } = await liveRpcs(state.rpcUrls);
           if (snapshot && head < snapshot.toBlock) {
             throw new RecoveryError(`The ${chain.name} RPC is behind this page's saved history. Try another RPC.`);
           }
           const liveLogs =
             head >= liveFrom
-              ? await fetchPoolLogs(rpcUrl, chain.pool.proxy, liveFrom, head, (fraction) =>
+              ? await fetchPoolLogs(rpcUrls, chain.pool.proxy, liveFrom, head, (fraction) =>
                   onProgress(chain, { phase: "history", fraction }),
                 )
               : [];
 
           const events = await toEngineEvents(txidVersion, [...snapshotLogs, ...liveLogs]);
+          const merkletree = engine.getUTXOMerkletree(txidVersion, railgunChain);
+          await assertReachesContractTip(state, merkletree, events.commitmentEvents, head);
           // Everything up to `head` is in these events, so the engine's own slow scan starts there.
           // `setLastSyncedBlock` is private in the typings but is the engine's own resume marker.
           await (engine as unknown as SyncMarker).setLastSyncedBlock(txidVersion, railgunChain, head);
@@ -334,6 +344,40 @@ function singleThreaded(groth16: Groth16): Groth16 {
         { ...(proverOptions as object), singleThread: true },
       ),
   };
+}
+
+/**
+ * Fails if the pool held more leaves at `head` than the history adds up to. The engine's root check
+ * can't catch this: the contract accepts every root it has ever had, so history missing its newest
+ * logs still passes and would show stale balances. Public RPCs do return empty lists, and with a
+ * fresh snapshot everything they're asked for is the newest logs.
+ */
+async function assertReachesContractTip(
+  { chain, rpcUrls }: ChainState,
+  merkletree: { getLatestTreeAndIndex(): Promise<{ tree: number; index: number }> },
+  commitmentEvents: CommitmentEvent[],
+  head: number,
+) {
+  // A rescan only brings new events; the rest of the history is already in the tree.
+  const latest = await merkletree.getLatestTreeAndIndex();
+  let tree = latest.tree;
+  let leaves = latest.index + 1;
+  for (const { treeNumber, startPosition, commitments } of commitmentEvents) {
+    const end = startPosition + commitments.length;
+    if (treeNumber > tree || (treeNumber === tree && end > leaves)) [tree, leaves] = [treeNumber, end];
+  }
+
+  const read = async (name: "treeNumber" | "nextLeafIndex") =>
+    Number(
+      await rpcAny<string>(rpcUrls, "eth_call", [
+        { to: chain.pool.proxy, data: poolInterface.encodeFunctionData(name) },
+        `0x${head.toString(16)}`,
+      ]),
+    );
+  const [contractTree, contractLeaves] = await Promise.all([read("treeNumber"), read("nextLeafIndex")]);
+  if (tree < contractTree || (tree === contractTree && leaves < contractLeaves)) {
+    throw new RecoveryError(`The ${chain.name} pool history didn't match the contract. Try another RPC.`);
+  }
 }
 
 /** Formats raw logs with the engine's own V2 event processors, the same path its slow scan uses. */

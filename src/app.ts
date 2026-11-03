@@ -10,7 +10,7 @@ import {
   RecoveryError,
   type FiberSeedFile,
 } from "./fiberseed";
-import { formatUnits, parseRpcUrl } from "./rpc";
+import { formatUnits, parseRpcUrls } from "./rpc";
 import type { PrivateHolding, RecoverySession, ScanProgress } from "./railgun";
 
 type ChainRow = {
@@ -189,25 +189,25 @@ for (const chain of RECOVERY_CHAINS) {
   const label = element("label", "field__label field__label--network");
   label.append(networkIcon(chain.slug), `${chain.name} RPC`);
   label.htmlFor = `rpc-${chain.id}`;
-  const input = element("input", "field__input field__input--mono");
+  const input = element("textarea", "field__input field__input--mono field__input--list");
   input.id = `rpc-${chain.id}`;
-  input.type = "url";
+  input.rows = chain.defaultRpcs.length;
   input.spellcheck = false;
   input.autocomplete = "off";
-  input.value = chain.defaultRpc;
+  input.value = chain.defaultRpcs.join("\n");
   input.addEventListener("input", () => input.classList.remove("field__input--error"));
   field.append(label, input);
   rpcFields.append(field);
 }
 
-const rpcInput = (chain: RecoveryChain) => $<HTMLInputElement>(`rpc-${chain.id}`);
+const rpcInput = (chain: RecoveryChain) => $<HTMLTextAreaElement>(`rpc-${chain.id}`);
 
 /** Validates every RPC field, opening the settings to show the first bad one. */
-function readRpcUrls(): Map<RecoveryChain, URL> | null {
-  const rpcUrls = new Map<RecoveryChain, URL>();
+function readRpcUrls(): Map<RecoveryChain, URL[]> | null {
+  const rpcUrls = new Map<RecoveryChain, URL[]>();
   for (const chain of RECOVERY_CHAINS) {
     try {
-      rpcUrls.set(chain, parseRpcUrl(rpcInput(chain).value, chain.name));
+      rpcUrls.set(chain, parseRpcUrls(rpcInput(chain).value, chain.name));
     } catch (caught) {
       rpcSettings.open = true;
       rpcInput(chain).classList.add("field__input--error");
@@ -219,15 +219,15 @@ function readRpcUrls(): Map<RecoveryChain, URL> | null {
 }
 
 /** Scans every chain as soon as the backup unlocks; each chain's row fills in as it finishes. */
-async function scanHoldings(rpcUrls: Map<RecoveryChain, URL>) {
+async function scanHoldings(rpcUrls: Map<RecoveryChain, URL[]>) {
   if (!seed || scanning) return;
   const current = session;
   holdingsResults.replaceChildren();
-  const rows = new Map([...rpcUrls].map(([chain, rpcUrl]) => [chain.id, chainRow(chain, rpcUrl, current)]));
+  const rows = new Map([...rpcUrls].map(([chain, urls]) => [chain.id, chainRow(chain, urls, current)]));
   const row = (chain: RecoveryChain) => rows.get(chain.id)!;
 
   // Proving files for uncommon sends come from one IPFS gateway; nothing else is reachable.
-  const origins = new Set([...[...rpcUrls.values()].map((url) => url.origin), ARTIFACT_GATEWAY]);
+  const origins = new Set([...[...rpcUrls.values()].flat().map((url) => url.origin), ARTIFACT_GATEWAY]);
   if (!lockConnections(origins)) {
     const error = new RecoveryError("Reload the page to use different RPCs.");
     for (const chainRow of rows.values()) chainRow.fail(error);
@@ -241,7 +241,7 @@ async function scanHoldings(rpcUrls: Map<RecoveryChain, URL>) {
     if (!seed || current !== session) return;
     const started = await startRecovery({
       seed,
-      targets: [...rpcUrls].map(([chain, rpcUrl]) => ({ chain, rpcUrl })),
+      targets: [...rpcUrls].map(([chain, urls]) => ({ chain, rpcUrls: urls })),
       onProgress: (chain, progress) => row(chain).progress(progress),
       onDone: (chain, holdings) => row(chain).done(holdings),
       onError: (chain, error) => row(chain).fail(error),
@@ -276,7 +276,7 @@ function lockConnections(origins: Set<string>): boolean {
 }
 
 /** Adds one chain's row to the results and returns the handlers that update it. */
-function chainRow(chain: RecoveryChain, rpcUrl: URL, scanSession: number): ChainRow {
+function chainRow(chain: RecoveryChain, rpcUrls: URL[], scanSession: number): ChainRow {
   const group = element("section", "holdings__group");
   const head = element("div", "holdings__head");
   const status = element("span", "holdings__status", "Starting…");
@@ -319,10 +319,10 @@ function chainRow(chain: RecoveryChain, rpcUrl: URL, scanSession: number): Chain
     done(holdings) {
       if (!current()) return;
       bar.remove();
-      status.textContent = `via ${rpcUrl.host}`;
+      status.textContent = rpcUrls.length === 1 ? `via ${rpcUrls[0]!.host}` : `via ${rpcUrls.length} RPCs`;
       status.classList.remove("holdings__status--error");
       const next = holdings.length
-        ? holdingsList(chain, rpcUrl, holdings, announce)
+        ? holdingsList(chain, rpcUrls, holdings, announce)
         : element("p", "holdings__empty", "No private holdings");
       if (content) content.replaceWith(next);
       else group.append(next);
@@ -341,7 +341,7 @@ function chainRow(chain: RecoveryChain, rpcUrl: URL, scanSession: number): Chain
 
 type Announce = (text: string, link: string) => void;
 
-function holdingsList(chain: RecoveryChain, rpcUrl: URL, holdings: PrivateHolding[], announce: Announce) {
+function holdingsList(chain: RecoveryChain, rpcUrls: URL[], holdings: PrivateHolding[], announce: Announce) {
   const list = element("ul", "asset-list");
   for (const holding of holdings) {
     const token = chain.tokens.find((candidate) => candidate.address.toLowerCase() === holding.address);
@@ -361,7 +361,7 @@ function holdingsList(chain: RecoveryChain, rpcUrl: URL, holdings: PrivateHoldin
       sendButton.addEventListener("click", () => {
         const open = row.querySelector(".send");
         if (open) return void open.remove();
-        row.append(sendForm(chain, rpcUrl, token, holding, announce));
+        row.append(sendForm(chain, rpcUrls, token, holding, announce));
       });
       line.append(label, amount, sendButton);
     } else {
@@ -384,7 +384,7 @@ function holdingsList(chain: RecoveryChain, rpcUrl: URL, holdings: PrivateHoldin
  * Unshields a token out of Fiber's pool to any address on the same chain. The proof is made
  * here; the user's browser wallet submits it and pays gas.
  */
-function sendForm(chain: RecoveryChain, rpcUrl: URL, token: Token, holding: PrivateHolding, announce: Announce) {
+function sendForm(chain: RecoveryChain, rpcUrls: URL[], token: Token, holding: PrivateHolding, announce: Announce) {
   const form = element("form", "send");
   form.noValidate = true;
   const id = `${chain.id}-${token.address}`;
@@ -500,10 +500,10 @@ function sendForm(chain: RecoveryChain, rpcUrl: URL, token: Token, holding: Priv
       if (current !== session) return;
 
       showStatus(`Confirm the transaction in ${wallet.name}.`);
-      const hash = await sendTransaction(wallet, chain, rpcUrl, from, transaction);
+      const hash = await sendTransaction(wallet, chain, rpcUrls, from, transaction);
       const link = `${chain.explorer}/tx/${hash}`;
       showStatus("Sent. Waiting for it to confirm…", link);
-      await waitForReceipt(rpcUrl, hash);
+      await waitForReceipt(rpcUrls, hash);
       if (current !== session) return;
 
       const to = recipient.value.trim();

@@ -332,6 +332,15 @@ p {
   font-size: 14px;
 }
 
+.field__input--list {
+  height: auto;
+  padding: 10px 12px;
+  line-height: 22px;
+  white-space: pre;
+  overflow-x: auto;
+  resize: vertical;
+}
+
 .field__input--error {
   border-color: var(--danger);
 }

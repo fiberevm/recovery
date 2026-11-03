@@ -18,6 +18,14 @@ export function parseRpcUrl(value: string, chainName: string): URL {
   return url;
 }
 
+/** Reads a chain's RPC field: one URL per line, with duplicates dropped. */
+export function parseRpcUrls(value: string, chainName: string): URL[] {
+  const lines = value.split(/[\s,]+/).filter(Boolean);
+  if (!lines.length) throw new RecoveryError(`Enter an RPC URL for ${chainName}.`);
+  const urls = lines.map((line) => parseRpcUrl(line, chainName));
+  return [...new Map(urls.map((url) => [url.href, url])).values()];
+}
+
 /** Splits a raw amount into whole and fractional digits, trimmed to `maxFraction` places. */
 export function formatUnits(amount: bigint, decimals: number, maxFraction = 6): { whole: string; fraction: string } {
   const base = 10n ** BigInt(decimals);
