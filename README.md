@@ -16,7 +16,7 @@ Hosted at **https://recovery.fiber.so**. Source: **https://github.com/fiberevm/r
 - **Key recovery works offline.** It never touches the network.
 - **The page only talks to the servers you choose.** The servers (RPCs) are listed under **RPC settings** before you unlock. By default that's several public servers per chain, used together for speed; replace the list to use only your own. When the scan starts, the page locks itself so it can only connect to those servers, plus one IPFS gateway (`ipfs-lb.com`) for proving files a send may need. The servers see your IP address and that someone read a pool's public history, never your keys or which funds are yours.
 - **Sending never exposes your backup.** The page makes the zero-knowledge proof itself and hands your browser wallet a finished transaction to submit. The wallet pays gas, and never sees the backup or its keys.
-- **The page can't be lied to quietly.** After rebuilding a pool's history, the page checks the result against the pool's live contract. If a server leaves out or changes anything, the scan fails with an error instead of showing an empty wallet.
+- **The page can't be lied to quietly.** After rebuilding a pool's history, the page checks the result against the pool's live contract. If a server leaves out part of the history, the page asks the other servers for it again, and if none of them has it the scan fails with an error instead of showing an empty wallet.
 - **Check the address bar.** The real page is only ever served from `https://recovery.fiber.so`. You can also download it and open it from your own computer (see below).
 
 Anyone who sees a private key can take everything at that address. Never share it, paste it into a website you don't trust, or send it to support.
@@ -60,6 +60,7 @@ open dist/index.html
 | `bun run artifacts` | Re-downloads the bundled proving circuits and checks their hashes. |
 | `bun run fixture` | Writes a test backup you can try the page with. |
 | `bun run typecheck` | Checks the TypeScript. |
+| `bun test` | Scans a local fork of Base through a faulty RPC. Needs Foundry's `anvil`. |
 
 ### Trying it without a real backup
 

@@ -5,3 +5,7 @@
 minimumReleaseAge = 259200
 # `bun add` writes exact versions; the lockfile is the source of truth for everything else.
 exact = true
+
+[test]
+# Loads src/ as the page build does (test/preload.ts).
+preload = ["./test/preload.ts"]
