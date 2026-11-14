@@ -163,8 +163,8 @@ export async function startRecovery({
                 )
               : [];
 
-          const events = await toEngineEvents(txidVersion, [...snapshotLogs, ...liveLogs]);
           const merkletree = engine.getUTXOMerkletree(txidVersion, railgunChain);
+          const events = await readWithoutGaps(state, merkletree, txidVersion, [...snapshotLogs, ...liveLogs], rpcUrls, from);
           await assertReachesContractTip(state, merkletree, events.commitmentEvents, head);
           // Everything up to `head` is in these events, so the engine's own slow scan starts there.
           // `setLastSyncedBlock` is private in the typings but is the engine's own resume marker.
@@ -378,6 +378,90 @@ async function assertReachesContractTip(
   if (tree < contractTree || (tree === contractTree && leaves < contractLeaves)) {
     throw new RecoveryError(`The ${chain.name} pool history didn't match the contract. Try another RPC.`);
   }
+}
+
+type Merkletree = { getLatestTreeAndIndex(): Promise<{ tree: number; index: number }> };
+
+/**
+ * Formats the history, re-reading any stretch of blocks it skips. Some public RPCs answer a window
+ * with an empty list instead of an error. The engine then stops building the tree at that hole,
+ * every note after it goes unseen, and the scan still passes the root and leaf-count checks: the
+ * wallet reads as empty. Leaves are numbered one after another, so a hole shows up as a commitment
+ * event that doesn't start where the previous one ended. Each RPC is asked for the hole in turn,
+ * and the scan fails if none of them fills it.
+ */
+async function readWithoutGaps(
+  { chain }: ChainState,
+  merkletree: Merkletree,
+  txidVersion: TXIDVersion,
+  logs: RawLog[],
+  rpcUrls: URL[],
+  fromBlock: number,
+) {
+  // A rescan only brings new events; the rest of the history is already in the tree.
+  const latest = await merkletree.getLatestTreeAndIndex();
+  const seen = new Set(logs.map(logKey));
+  let events = await toEngineEvents(txidVersion, logs);
+
+  for (let gap = findGap(events.commitmentEvents, latest, fromBlock); gap; ) {
+    let filled = false;
+    for (const rpcUrl of rpcUrls) {
+      const refetched = await fetchPoolLogs([rpcUrl], chain.pool.proxy, gap.fromBlock, gap.toBlock, () => undefined).catch(
+        () => [],
+      );
+      const fresh = refetched.filter((log) => !seen.has(logKey(log)));
+      if (!fresh.length) continue;
+      for (const log of fresh) seen.add(logKey(log));
+      logs = [...logs, ...fresh].sort(
+        (a, b) => Number(a.blockNumber) - Number(b.blockNumber) || Number(a.logIndex) - Number(b.logIndex),
+      );
+      events = await toEngineEvents(txidVersion, logs);
+      filled = true;
+      break;
+    }
+    if (!filled) {
+      throw new RecoveryError(`The ${chain.name} RPCs left out part of the pool history. Try another RPC.`);
+    }
+    gap = findGap(events.commitmentEvents, latest, fromBlock);
+  }
+  return events;
+}
+
+const logKey = (log: RawLog) => `${log.transactionHash}:${Number(log.logIndex)}`;
+
+/** Railgun's trees hold 2^16 leaves; the pool opens a new tree when a batch wouldn't fit. */
+const TREE_LEAVES = 2 ** 16;
+
+/**
+ * Returns the blocks between the last commitment event that continues the tree and the first one
+ * that doesn't, or null when the events follow on from the tree without a hole.
+ */
+function findGap(
+  commitmentEvents: CommitmentEvent[],
+  latest: { tree: number; index: number },
+  fromBlock: number,
+): { fromBlock: number; toBlock: number } | null {
+  let tree = latest.tree;
+  let leaves = latest.index + 1;
+  let lastBlock = fromBlock;
+  const sorted = [...commitmentEvents].sort((a, b) => a.treeNumber - b.treeNumber || a.startPosition - b.startPosition);
+  for (const event of sorted) {
+    const end = event.startPosition + event.commitments.length;
+    // Already in the tree, e.g. the first block of a rescan.
+    if (event.treeNumber < tree || (event.treeNumber === tree && end <= leaves)) {
+      lastBlock = Math.max(lastBlock, event.blockNumber);
+      continue;
+    }
+    const continues = event.treeNumber === tree && event.startPosition <= leaves;
+    // Allows a batch that would fill the tree exactly, so an off-by-one can't fail a good history.
+    const opensTree =
+      event.treeNumber === tree + 1 && event.startPosition === 0 && leaves + event.commitments.length >= TREE_LEAVES;
+    if (!continues && !opensTree) return { fromBlock: lastBlock, toBlock: event.blockNumber };
+    tree = event.treeNumber;
+    leaves = end;
+    lastBlock = Math.max(lastBlock, event.blockNumber);
+  }
+  return null;
 }
 
 /** Formats raw logs with the engine's own V2 event processors, the same path its slow scan uses. */
