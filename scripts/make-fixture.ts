@@ -17,6 +17,25 @@ const payload = new TextEncoder().encode(
     createdAt,
     encoding: "base64",
     seed: Buffer.from(TEST_SEED, "hex").toString("base64"),
+    // The newer backup section: where Fiber saw tokens outside the private pool. These are the
+    // test wallet's real first addresses, so the page can check and list them.
+    publicHoldings: [
+      {
+        network: "evm",
+        derivationIndex: 0,
+        address: "0xACA6302EcBde40120cb8A08361D8BD461282Bd18",
+        tokens: [
+          { chainId: 42161, tokenAddress: "0xaf88d065e77c8cC2239327C5EDb3A432268e5831" },
+          { chainId: 137, tokenAddress: "0x3c499c542cEF5E3811e1192ce70d8cC03d5c3359" },
+        ],
+      },
+      {
+        network: "solana",
+        derivationIndex: 0,
+        address: "8x5oj8rEbxiUwjFydDBV48uMS9J7EzxVt3WDA3LdByGm",
+        tokens: [{ chainId: 101, tokenAddress: "EPjFWdd5AufqSSqeM2qN1xzybapC8G4wEGGkZwyTDt1v" }],
+      },
+    ],
   }),
 );
 const salt = crypto.getRandomValues(new Uint8Array(32));

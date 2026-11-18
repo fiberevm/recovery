@@ -1,6 +1,7 @@
-// The user's own browser wallet (MetaMask, Rabby, …) pays gas for unshield transactions.
+// The user's own browser wallet (MetaMask, Rabby, …) pays gas for unshield transactions, and tops up
+// a public address that has no gas of its own.
 // Its requests go through the extension, not this page's network, and this page never sees its keys.
-import type { RecoveryChain } from "./chains";
+import type { Chain } from "./chains";
 import { RecoveryError } from "./fiberseed";
 import { rpcAny } from "./pool-logs";
 
@@ -44,10 +45,10 @@ export async function connect(wallet: BrowserWallet): Promise<string> {
  */
 export async function sendTransaction(
   wallet: BrowserWallet,
-  chain: RecoveryChain,
+  chain: Chain,
   rpcUrls: URL[],
   from: string,
-  transaction: { to: string; data: string },
+  transaction: { to: string; data?: string; value?: string },
 ): Promise<string> {
   let estimate: bigint;
   try {
@@ -80,7 +81,9 @@ export async function waitForReceipt(rpcUrls: URL[], hash: string, timeoutMs = 1
   throw new RecoveryError("Still waiting for the transaction. Check it on the block explorer.");
 }
 
-async function switchChain(wallet: BrowserWallet, chain: RecoveryChain) {
+async function switchChain(wallet: BrowserWallet, chain: Chain) {
+  // Arc pays gas in USDC.
+  const symbol = chain.nativeSymbol ?? "USDC";
   const chainId = `0x${chain.id.toString(16)}`;
   try {
     await walletRequest(wallet, "wallet_switchEthereumChain", [{ chainId }]);
@@ -91,7 +94,7 @@ async function switchChain(wallet: BrowserWallet, chain: RecoveryChain) {
       {
         chainId,
         chainName: chain.name,
-        nativeCurrency: { name: chain.nativeSymbol, symbol: chain.nativeSymbol, decimals: 18 },
+        nativeCurrency: { name: symbol, symbol, decimals: 18 },
         rpcUrls: chain.defaultRpcs,
         blockExplorerUrls: [chain.explorer],
       },

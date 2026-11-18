@@ -81,6 +81,38 @@ export async function findPrivateKey(seed: Uint8Array, address: string): Promise
   return null;
 }
 
+/** The key at one derivation index, with its address, for holdings whose index is already known. */
+export function keyAt(seed: Uint8Array, kind: AddressKind, index: number): RecoveredKey & { address: string } {
+  if (kind === "evm") {
+    const child = HDNodeWallet.fromSeed(seed).derivePath(evmPath(index));
+    return { network: "EVM", index, path: evmPath(index), privateKey: child.privateKey, address: child.address };
+  }
+  const leaf = slip10Child(slip10Child(slip10Child(slip10Child(slip10Master(seed), 44), 501), index), 0);
+  try {
+    const secret = leaf.subarray(0, 32);
+    const publicKey = ed25519.getPublicKey(secret);
+    const secretKey = new Uint8Array(64);
+    secretKey.set(secret);
+    secretKey.set(publicKey, 32);
+    const privateKey = encodeBase58(secretKey);
+    secretKey.fill(0);
+    return { network: "Solana", index, path: solanaPath(index), privateKey, address: encodeBase58(publicKey) };
+  } finally {
+    leaf.fill(0);
+  }
+}
+
+/** The EVM addresses at indexes 0 to `count - 1`, in order. Fiber hands indexes out one by one. */
+export async function evmAddresses(seed: Uint8Array, count: number): Promise<string[]> {
+  const parent = HDNodeWallet.fromSeed(seed).derivePath("m/44'/60'/0'/0");
+  const addresses: string[] = [];
+  for (let index = 0; index < count; index++) {
+    if (index % 50 === 0) await yieldToPage();
+    addresses.push(parent.deriveChild(index).address);
+  }
+  return addresses;
+}
+
 /* SLIP-0010 Ed25519: every level is hardened. A node is 64 bytes: key, then chain code. */
 
 function slip10Master(seed: Uint8Array): Uint8Array {

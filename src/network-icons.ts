@@ -31,6 +31,13 @@ export const NETWORK_ICONS: Record<string, string> = {
 export function networkIcon(slug: string): HTMLSpanElement {
   const icon = document.createElement("span");
   icon.className = "network-icon";
-  icon.innerHTML = NETWORK_ICONS[slug] ?? "";
+  // Networks without a drawn mark get a neutral badge with their initial.
+  const initial = (slug[0] ?? "").toUpperCase().replace(/[^A-Z]/g, "");
+  icon.innerHTML =
+    NETWORK_ICONS[slug] ??
+    badge(
+      "#8e8e93",
+      `<text x="12" y="16.2" text-anchor="middle" font-family="system-ui, sans-serif" font-size="11.5" font-weight="700" fill="#fff">${initial}</text>`,
+    );
   return icon;
 }

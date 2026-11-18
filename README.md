@@ -4,8 +4,9 @@ Get your money out of Fiber using only your backup file, even if Fiber's app and
 
 Fiber Recovery is a single web page. You give it your `.fiberseed` backup and its password, and it can:
 
-- **Find your private holdings.** It scans Fiber's private pools on Ethereum, Arbitrum, Base and BNB Chain as soon as you unlock, and lists what you own in them.
-- **Send them out.** Move a private balance to any address on the same chain. Your own browser wallet (MetaMask, Rabby, …) pays the gas.
+- **Show your private balance.** It scans Fiber's private pools on Ethereum, Arbitrum, Base and BNB Chain as soon as you unlock. Your total is at the top, in dollars, and grows live as earning balances accrue. Below it, every token on every network has its own row, under Stablecoins, Stocks, Metals, Crypto or Other.
+- **Send them out.** Move a private balance to any address on the same chain. Your own browser wallet (MetaMask, Rabby, …) pays the gas. Earning balances are unwrapped on the way, so the address receives plain USDC or USDT.
+- **Find what's outside the pools.** It checks your wallet's own addresses on every network Fiber takes deposits on, and lists any tokens sitting there.
 - **Recover private keys.** Paste one of your wallet addresses and it shows that address's private key, so you can import it into another wallet such as MetaMask or Phantom.
 
 Hosted at **https://recovery.fiber.so**. Source: **https://github.com/fiberevm/recovery**.
@@ -28,8 +29,10 @@ Anyone who sees a private key can take everything at that address. Never share i
 3. Optional: open **RPC settings** to replace the default servers with your own (one URL per line).
 4. Enter the password you set when you exported the backup, then press **Unlock**. Scanning starts right away.
 5. Choose what you need:
-   - **Private holdings:** each chain lists what you hold. To move a balance out, press **Send**, enter the address to send to and the amount (**Max** sends everything), pick the browser wallet that will pay gas, and press **Send**. Approve the transaction in your wallet. When it confirms, the page shows a link to the block explorer and refreshes the balance.
-   - **Private key recovery:** paste an address (`0x…` for EVM networks, or a Solana address) and press **Find private key**. The key is blurred until you press **Reveal**.
+   - **Holdings:** your total, then a row per token per network. A chip for each network shows its scan; if one fails, press **Retry** on it. To move a balance out, press **Send** on its row, enter the address to send to and the amount (**Max** sends everything), pick the browser wallet that will pay gas, and press **Send**. Approve the transaction in your wallet. When it confirms, the page shows a link to the block explorer and refreshes the balance.
+     For an earning balance the button is **Unwrap and send**: the balance moves to your browser wallet, is unwrapped to the stablecoin it holds (shown on the row), and that stablecoin goes to the address you entered. Your wallet confirms two transactions. If the second one fails, the balance is safe in your wallet and the button tries the unwrap again.
+     Rows marked **public** are tokens at one of your wallet's own addresses, outside the private pool. **Send** moves them to any address: the page signs with that address's own key, and if the address has nothing to pay the network fee with, the page tops it up first, from another of your addresses on that network or from your browser wallet. **Show key** gives the address's private key, to import into another wallet instead. **Look for other tokens** reads transfer history for tokens Fiber has no name for; it can take a long time on free servers, and **Carry on** resumes it if it stops.
+   - **Private keys:** paste an address (`0x…` for EVM networks, or a Solana address) and press **Find private key**. The key is blurred until you press **Reveal**.
 6. Press **Lock** when you're done. Closing the tab also clears everything.
 
 Sending moves funds out of Fiber's private pool to a public address, on the same chain. You need a little ETH (Ethereum, Arbitrum, Base) or BNB (BNB Chain) in your browser wallet for gas. Gas on Ethereum costs much more than on the other chains.
@@ -122,7 +125,38 @@ To find them, the page:
 
 Code: `src/railgun.ts` (engine), `src/pool-logs.ts` (fetching history), `src/snapshots.ts` (saved history).
 
-### 4. Sending (unshielding)
+### 4. Unwrapping earning balances
+
+USDC Prime, Galaxy USDT, FUSDT0 and FUSDT are shares in ERC-4626 vaults. A share is only useful to someone who knows to redeem it, so **Unwrap and send** does both steps: it unshields the shares to the browser wallet that pays gas, then has that wallet call the vault's `redeem` with the recipient as receiver. Any holder may redeem from these vaults; that was checked by simulating a redeem from each pool's own shares. The page remembers that the shares have left the pool, so a retry only redeems.
+
+### 5. Public holdings
+
+A Fiber wallet also has ordinary addresses, numbered 0, 1, 2… in the order Fiber created them. Newer backups list the addresses that held tokens when the backup was made, but the page doesn't depend on that list. It derives the first 200 addresses (more if the backup lists a higher one) and checks them itself, on the four pool networks and on Polygon, Unichain, Monad, HyperEVM, Robinhood Chain, Arc and Plasma:
+
+1. **Sweep.** Reads the balance of the gas token and of every token Fiber has a name for, at every address, a few hundred balances per call through Multicall3. This takes seconds and doesn't depend on history.
+2. **Transfer history** (the **Look for other tokens** button). Reads ERC-20 `Transfer` logs sent to those addresses since 1 August 2026, the month Fiber launched, then checks what is still held. This finds tokens with no name in Fiber's registry. Free servers allow only a few thousand blocks per request and rate-limit long scans, so this can take from minutes to hours depending on the network. The scan keeps its place, so **Carry on** resumes it.
+
+A token found only by its history is shown with the symbol its own contract reports and no dollar value, because anyone can deploy a contract that calls itself USDC. Holdings the backup lists on Solana, Stellar and Tron are shown under **On other networks** without a balance; the page can give the Solana key.
+
+Sending a public holding needs no proof and no browser wallet. The page derives the address's key, signs a plain transfer (a legacy transaction, which every one of these networks accepts) and submits it through your RPCs. The first press of **Send** only shows the amount, recipient and highest possible fee; the second sends. Three cases around the fee:
+
+- Sending the gas token itself: the fee comes out of the amount, so "Max" arrives slightly short. The same goes for USDC on Arc, where USDC is the gas token.
+- The address holds a token but too little gas: the page first sends it the fee, from another of the backup's addresses on that network if one holds twice the amount, else by asking the browser wallet.
+- On Base and Unichain a second fee for posting data is read from the chain's gas oracle and doubled as a margin.
+
+Code: `src/public-holdings.ts`, `src/public-send.ts`, `src/derive.ts` (`evmAddresses`, `keyAt`), `src/fiberseed.ts` (the backup's list).
+
+### 6. Dollar values
+
+Dollar values are estimates, read on-chain through the same RPCs, so the page needs no price server:
+
+- **Market prices** come from [Chainlink](https://data.chain.link) price feeds: stocks, gold, the Canadian dollar, ETH, BTC, SOL and BNB. USDC and USDT count as one dollar. A tokenized stock is valued at its share price, which can differ slightly from the token's own price.
+- **Earning balances** (USDC Prime, Galaxy USDT, FUSDT0, FUSDT) are vault shares, valued with the vault's own share price. The page reads that price about once a minute, measures how fast it is growing, and ticks the balance forward at that rate in between. The rate shown on the row is the measured one.
+- **No feed, no price.** AMD, Broadcom, Eli Lilly, Marvell, SanDisk and the silver trust have no Chainlink feed, and unknown tokens have none either. They show their amount and are left out of the total, which says so.
+
+Each chain's prices come from one call to Multicall3, so a reading is consistent with its block time. Code: `src/market.ts` (categories and feeds), `src/prices.ts` (reading and projecting).
+
+### 7. Sending (unshielding)
 
 Moving funds out of a pool is called unshielding. In Fiber's fork of the Railgun contracts, only Fiber can put funds into a pool, but anyone can take them out with a valid proof. So recovery doesn't need Fiber at all.
 
@@ -152,6 +186,10 @@ Arbitrum and BNB Chain share a pool address; the page always picks the pool by c
 The default servers are in the same file, as a list per chain taken from [Chainlist](https://chainlist.org/rpcs.json). Most listed servers don't suit this page: many refuse browser requests or old history, and some answer log queries with an empty list instead of an error. The defaults are the ones that returned the right logs from a browser origin in testing, so test a new server against a block range known to hold logs before adding it.
 
 A scan first drops servers that don't answer or are behind the others, then hands out block ranges from a shared queue, so faster servers do more of the work. The page reads each server's limits from its error messages, slows down when it is rate-limited, and moves a range to another server when one fails or takes too long. If you have your own RPC (Alchemy, QuickNode, etc.), you can paste it in instead.
+
+BNB Chain is the hard one. Few public BNB servers keep log history, and several answer old ranges with an empty list. The two defaults return the right logs but only for 1,000 and 100 blocks a request, so a BNB scan is quick with a fresh snapshot and slows as the snapshot ages. Refresh the snapshots often, or paste in your own BNB RPC.
+
+Public holdings are also looked for on the other networks Fiber takes deposits on: Polygon, Unichain, Monad, HyperEVM, Robinhood Chain, Arc and Plasma. They have no pool, so nothing is scanned there except your own addresses. Each has its own list of default servers in `src/chains.ts` and its own field under **RPC settings**. Solana, Stellar and Tron balances aren't read; holdings your backup lists there show under **On other networks**, with the key for Solana addresses.
 
 ### Pool snapshots
 
@@ -183,11 +221,15 @@ The older a snapshot is, the more a scan has to fetch live from the free servers
 ```
 index.html            The page
 src/
-  app.ts              Page logic: file drop, unlock, both sections
+  app.ts              Page logic: file drop, unlock, holdings and private keys
   fiberseed.ts        Reading and unlocking .fiberseed files
   derive.ts           Address and private key derivation
-  chains.ts           Pools and default servers per chain
+  chains.ts           Pools, deposit networks and default servers per chain
   tokens.ts           Token names per chain, from Fiber's token registry
+  market.ts           Category and price source for each token
+  prices.ts           Dollar values, read on-chain through the RPCs
+  public-holdings.ts  Tokens at the wallet's own addresses, on every deposit network
+  public-send.ts      Signs and submits a send from one of those addresses
   network-icons.ts    Network icons
   railgun.ts          Private holdings scan and sends (Railgun engine)
   pool-logs.ts        Fetching pool history from a server
