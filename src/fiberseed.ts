@@ -14,12 +14,64 @@ export type FiberSeedFile = {
   cipher: { name: "AES-256-GCM"; nonce: string; ciphertext: string };
 };
 
+/** One address that held tokens outside the private pool when the backup was made. */
+export type PublicHolding = {
+  network: "evm" | "solana" | "stellar" | "tron";
+  /** The `<n>` in the network's derivation path. */
+  derivationIndex: number;
+  address: string;
+  tokens: { chainId: number; tokenAddress: string }[];
+};
+
+/** Everything a backup holds once its password opens it. */
+export type FiberSeedContents = {
+  seed: Uint8Array;
+  /** Empty for backups made before Fiber listed them. A hint only: the page also looks for itself. */
+  publicHoldings: PublicHolding[];
+  /** True when Fiber cut the list short to keep the file small. */
+  publicHoldingsTruncated: boolean;
+};
+
 type WalletSeedPayload = {
   format: "fiber-wallet-seed";
   version: typeof FORMAT_VERSION;
   encoding: "base64";
   seed: string;
+  publicHoldings?: unknown;
+  publicHoldingsTruncated?: boolean;
 };
+
+const NETWORKS: readonly string[] = ["evm", "solana", "stellar", "tron"];
+
+/** Keeps only well-formed holdings and their known fields, as Fiber's own reader does. */
+function normalizePublicHoldings(value: unknown): PublicHolding[] {
+  if (!Array.isArray(value)) return [];
+  const holdings: PublicHolding[] = [];
+  for (const entry of value as Partial<PublicHolding>[]) {
+    if (
+      !entry ||
+      typeof entry.network !== "string" ||
+      !NETWORKS.includes(entry.network) ||
+      !Number.isSafeInteger(entry.derivationIndex) ||
+      (entry.derivationIndex as number) < 0 ||
+      typeof entry.address !== "string" ||
+      !Array.isArray(entry.tokens)
+    ) {
+      continue;
+    }
+    const tokens = entry.tokens
+      .filter((token) => token && Number.isSafeInteger(token.chainId) && typeof token.tokenAddress === "string")
+      .map((token) => ({ chainId: token.chainId, tokenAddress: token.tokenAddress }));
+    if (!tokens.length) continue;
+    holdings.push({
+      network: entry.network as PublicHolding["network"],
+      derivationIndex: entry.derivationIndex as number,
+      address: entry.address,
+      tokens,
+    });
+  }
+  return holdings;
+}
 
 /** Strict base64 to bytes with the browser's own decoder (atob rejects malformed input). */
 function decodeBase64(value: string): Uint8Array<ArrayBuffer> {
@@ -64,9 +116,10 @@ export function parseFiberSeedFile(text: string): FiberSeedFile {
 
 /**
  * Opens a backup with the browser's native PBKDF2 and AES-GCM, keeping the derived key non-extractable.
- * It accepts a parsed file and its password, and returns the raw master seed bytes.
+ * It accepts a parsed file and its password, and returns the raw master seed bytes with the
+ * backup's list of public holdings.
  */
-export async function decryptFiberSeed(file: FiberSeedFile, password: string): Promise<Uint8Array> {
+export async function decryptFiberSeed(file: FiberSeedFile, password: string): Promise<FiberSeedContents> {
   if (!password) throw new RecoveryError("Enter the password for this backup.");
 
   const passwordBytes = new TextEncoder().encode(password);
@@ -120,7 +173,11 @@ export async function decryptFiberSeed(file: FiberSeedFile, password: string): P
     if (seed.length < 16 || seed.length > 64) {
       throw new RecoveryError("This backup opened, but its seed is the wrong length.");
     }
-    return seed;
+    return {
+      seed,
+      publicHoldings: normalizePublicHoldings(payload.publicHoldings),
+      publicHoldingsTruncated: payload.publicHoldingsTruncated === true,
+    };
   } finally {
     payloadBytes?.fill(0);
     passwordBytes.fill(0);

@@ -38,7 +38,31 @@
   --accent-deep: #3f315d;
   --positive: #1a6f24;
   --danger: #d92d25;
+  --positive-muted: #e1f2e4;
+  --separator: rgba(0, 0, 0, 0.05);
   --hover: rgba(0, 0, 0, 0.035);
+  --hero-ink: #464646;
+  --hero-muted: #a2a2a2;
+  /* Page gutter: 64px on a wide screen, stepping down to 20px on a phone, as in Fiber's web app. */
+  --gutter: 64px;
+}
+
+@media (max-width: 1280px) {
+  :root {
+    --gutter: 48px;
+  }
+}
+
+@media (max-width: 1024px) {
+  :root {
+    --gutter: 32px;
+  }
+}
+
+@media (max-width: 640px) {
+  :root {
+    --gutter: 20px;
+  }
 }
 
 * {
@@ -82,6 +106,7 @@ svg {
 }
 
 h1,
+h2,
 p {
   margin: 0;
 }
@@ -127,23 +152,76 @@ p {
   font-weight: 600;
 }
 
-/* Source link */
+/* Top bar: wordmark, the two sections once unlocked, then source and lock. */
 
 .topbar {
   display: flex;
-  justify-content: flex-end;
-  padding: 12px 24px 0;
+  width: 100%;
+  max-width: 1400px;
+  min-height: 72px;
+  align-items: center;
+  gap: 24px;
+  margin: 0 auto;
+  padding: 0 var(--gutter);
+}
+
+.wordmark {
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  white-space: nowrap;
+}
+
+.wordmark__product {
+  color: var(--ink-tertiary);
+  font-weight: 400;
+}
+
+.tabs {
+  display: flex;
+  gap: 4px;
+}
+
+.tab {
+  height: 40px;
+  padding: 0 16px;
+  border-radius: 20px;
+  color: var(--ink-secondary);
+  background: transparent;
+  font-size: 15px;
+  font-weight: 500;
+  white-space: nowrap;
+  transition:
+    background 120ms ease-out,
+    color 120ms ease-out;
+}
+
+.tab:hover {
+  color: var(--ink);
+}
+
+.tab--active {
+  color: var(--ink);
+  background: var(--surface-secondary);
+  font-weight: 600;
+}
+
+.topbar__end {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-left: auto;
 }
 
 .source-link {
   display: inline-flex;
-  min-height: 32px;
+  min-height: 40px;
   align-items: center;
   gap: 6px;
-  padding: 0 10px;
-  border-radius: 8px;
+  padding: 0 12px;
+  border-radius: 20px;
   color: var(--ink-secondary);
-  font-size: 13px;
+  font-size: 14px;
   font-weight: 500;
   text-decoration: none;
   transition:
@@ -161,28 +239,71 @@ p {
   height: 16px;
 }
 
-/* Layout: one narrow column, centred in the window. */
+.pill {
+  height: 40px;
+  flex: 0 0 auto;
+  padding: 0 18px;
+  border-radius: 20px;
+  color: #ffffff;
+  background: var(--ink);
+  font-size: 14px;
+  font-weight: 600;
+  transition:
+    opacity 120ms ease-out,
+    transform 120ms ease-out;
+}
+
+.pill:hover {
+  opacity: 0.86;
+}
+
+.pill:active {
+  transform: scale(0.98);
+}
+
+.pill--quiet {
+  color: var(--ink);
+  background: var(--surface-secondary);
+  box-shadow: inset 0 0 0 1px var(--separator);
+}
+
+.pill--quiet[aria-expanded="true"] {
+  color: #ffffff;
+  background: var(--ink);
+}
+
+/* Layout: unlocking is one narrow centred column; the unlocked wallet uses the whole window. */
 
 .page {
+  display: flex;
+  width: 100%;
+  flex: 1;
+  flex-direction: column;
+}
+
+.unlock {
   display: flex;
   width: 100%;
   max-width: 520px;
   flex: 1;
   flex-direction: column;
   justify-content: center;
+  gap: 24px;
   margin: 0 auto;
-  padding: 48px 24px;
+  padding: 32px 24px 48px;
 }
 
-.stack,
+.wallet {
+  width: 100%;
+  max-width: 1400px;
+  margin: 0 auto;
+  padding: 40px var(--gutter) 64px;
+}
+
 .form {
   display: flex;
   flex-direction: column;
   gap: 16px;
-}
-
-.stack {
-  gap: 24px;
 }
 
 .intro {
@@ -199,15 +320,24 @@ p {
   line-height: 30px;
 }
 
-.intro h1:focus {
-  outline: none;
-}
-
 .intro p {
   color: var(--ink-secondary);
   font-size: 15px;
   line-height: 22px;
   text-wrap: pretty;
+}
+
+.intro .intro__source {
+  margin-top: 6px;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.intro__source a {
+  color: var(--ink);
+  font-weight: 600;
+  text-underline-offset: 3px;
 }
 
 /* Drop area */
@@ -461,37 +591,6 @@ p {
   color: var(--ink-secondary);
 }
 
-/* Sections */
-
-.panel {
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  padding: 20px;
-  border: 1px solid var(--border);
-  border-radius: 12px;
-}
-
-.panel__head {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-}
-
-.panel__title {
-  margin: 0;
-  font-size: 17px;
-  font-weight: 600;
-  letter-spacing: -0.3px;
-}
-
-.panel__body {
-  color: var(--ink-secondary);
-  font-size: 14px;
-  line-height: 21px;
-  text-wrap: pretty;
-}
-
 .text-button {
   flex: 0 0 auto;
   padding: 4px 6px;
@@ -531,46 +630,384 @@ p {
   height: 16px;
 }
 
-/* Private holdings */
+.skeleton {
+  display: block;
+  border-radius: 8px;
+  background: var(--surface-secondary);
+  animation: pulse 1.4s ease-in-out infinite;
+}
+
+@keyframes pulse {
+  50% {
+    opacity: 0.5;
+  }
+}
+
+/* Balance: the total across every network, ticking as earning holdings grow. */
 
 .holdings {
   display: flex;
   flex-direction: column;
-  border-top: 1px solid var(--border);
+  gap: 48px;
 }
 
-.holdings__group {
+.hero {
   display: flex;
+  min-width: 0;
   flex-direction: column;
-  gap: 10px;
-  padding: 14px 0;
-}
-
-.holdings__group + .holdings__group {
-  border-top: 1px solid var(--border);
-}
-
-.holdings__group:last-child {
-  padding-bottom: 0;
-}
-
-.holdings__head {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 12px;
-}
-
-.holdings__name,
-.field__label--network {
-  display: inline-flex;
-  align-items: center;
   gap: 8px;
 }
 
-.holdings__name {
+.hero__label {
+  color: var(--ink-tertiary);
+  font-size: 14px;
+  font-weight: 400;
+  line-height: 18px;
+}
+
+.hero__label:focus {
+  outline: none;
+}
+
+/* Fiber's twelve-digit hero: Space Grotesk 72/79, whole dollars in hero ink, the fraction muted. */
+.hero__balance {
+  display: flex;
+  min-height: 79px;
+  align-items: center;
+  color: var(--hero-ink);
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: clamp(34px, 6.4vw, 72px);
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.02em;
+  line-height: 1.1;
+  white-space: nowrap;
+}
+
+.hero__balance .money__fraction {
+  color: var(--hero-muted);
+}
+
+.hero__skeleton {
+  width: min(520px, 80%);
+  height: 56px;
+  border-radius: 14px;
+}
+
+.hero__note {
+  color: var(--ink-secondary);
+  font-size: 15px;
+  line-height: 20px;
+  font-variant-numeric: tabular-nums;
+}
+
+/* One chip per network: lavender while it's being read, then quiet. */
+
+.networks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 16px;
+}
+
+.networks:empty {
+  display: none;
+}
+
+.network {
+  display: inline-flex;
+  min-height: 36px;
+  align-items: center;
+  gap: 8px;
+  padding: 0 14px 0 9px;
+  border-radius: 18px;
+  background: var(--surface-secondary);
+  font-size: 14px;
+}
+
+.network__name {
+  font-weight: 500;
+}
+
+.network__status {
+  color: var(--ink-tertiary);
+  font-variant-numeric: tabular-nums;
+}
+
+.network__status:empty {
+  display: none;
+}
+
+.network[data-state="scanning"] {
+  color: var(--accent-deep);
+  background: var(--accent-muted);
+}
+
+.network[data-state="scanning"] .network__status {
+  color: var(--accent-deep);
+}
+
+.network[data-state="done"]::after {
+  width: 14px;
+  height: 14px;
+  background: var(--positive);
+  content: "";
+  mask: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='black' stroke-width='2.6' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='m5 12.5 4.5 4.5L19 7.5'/%3E%3C/svg%3E") center / contain no-repeat;
+}
+
+.network[data-state="failed"] .network__status {
+  color: var(--danger);
+}
+
+.network__retry {
+  padding: 2px 0;
+  color: var(--ink);
+  background: transparent;
   font-size: 14px;
   font-weight: 600;
+  text-decoration: underline;
+  text-underline-offset: 3px;
+}
+
+.network-errors:empty {
+  display: none;
+}
+
+.network-errors__item {
+  color: var(--danger);
+  font-size: 13px;
+  line-height: 19px;
+}
+
+.public-status {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 4px 12px;
+  margin-top: 4px;
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 19px;
+  font-variant-numeric: tabular-nums;
+}
+
+.public-status .network__retry {
+  font-size: 13px;
+}
+
+.keys__title:focus {
+  outline: none;
+}
+
+#elsewhere:empty {
+  display: none;
+}
+
+.notices:empty {
+  display: none;
+}
+
+.notices {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  margin-top: -16px;
+}
+
+.notice {
+  padding: 12px 16px;
+  border-radius: 12px;
+  color: var(--positive);
+  background: var(--positive-muted);
+  font-size: 14px;
+  font-weight: 500;
+  line-height: 20px;
+}
+
+/* Categories: a 20px title with the count and subtotal over a hairline, then wide rows. */
+
+.sections {
+  display: flex;
+  flex-direction: column;
+  gap: 48px;
+}
+
+.empty {
+  padding: 48px 0;
+  color: var(--ink-secondary);
+  font-size: 15px;
+  line-height: 22px;
+  text-align: center;
+}
+
+.section {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.section__header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--separator);
+}
+
+.section__title {
+  font-size: 20px;
+  font-weight: 600;
+  letter-spacing: -0.2px;
+  line-height: 25px;
+}
+
+.section__meta {
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.rows {
+  display: flex;
+  flex-direction: column;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.row + .row {
+  border-top: 1px solid var(--separator);
+}
+
+.row__main {
+  display: flex;
+  min-height: 84px;
+  align-items: center;
+  gap: 16px;
+  padding: 16px 0;
+}
+
+.row__icon {
+  position: relative;
+  display: grid;
+  width: 44px;
+  height: 44px;
+  flex: 0 0 auto;
+  place-items: center;
+  border-radius: 50%;
+}
+
+/* Flat identity fields from Fiber's muted avatar palette, one per category. */
+.row__icon--stablecoin {
+  color: #405d49;
+  background: #e7efe9;
+}
+
+.row__icon--stock {
+  color: #3e5569;
+  background: #eaf0f5;
+}
+
+.row__icon--metal {
+  color: #65553f;
+  background: #f2ede4;
+}
+
+.row__icon--crypto {
+  color: #435c83;
+  background: #e7edf8;
+}
+
+.row__icon--other {
+  color: var(--ink-secondary);
+  background: var(--surface-secondary);
+}
+
+.row__glyph {
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: 11px;
+  font-weight: 500;
+  letter-spacing: -0.2px;
+}
+
+.row__icon .network-icon {
+  position: absolute;
+  right: -3px;
+  bottom: -3px;
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  box-shadow: 0 0 0 2px var(--surface);
+}
+
+.row__identity {
+  display: flex;
+  min-width: 0;
+  flex: 1;
+  flex-direction: column;
+  gap: 2px;
+}
+
+.row__name {
+  overflow: hidden;
+  font-size: 17px;
+  font-weight: 600;
+  letter-spacing: -0.3px;
+  line-height: 22px;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.row__detail,
+.row__sub {
+  color: var(--ink-tertiary);
+  font-size: 13px;
+  line-height: 18px;
+}
+
+.row__earn {
+  flex: 0 0 auto;
+  padding: 4px 10px;
+  border-radius: 999px;
+  color: var(--positive);
+  background: var(--positive-muted);
+  font-size: 13px;
+  font-weight: 600;
+  line-height: 18px;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.row__value {
+  display: flex;
+  min-width: 190px;
+  flex: 0 0 auto;
+  flex-direction: column;
+  align-items: flex-end;
+  gap: 2px;
+  margin-left: 8px;
+}
+
+.row__amount {
+  display: flex;
+  justify-content: flex-end;
+  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+  font-size: 17px;
+  font-weight: 500;
+  font-variant-numeric: tabular-nums;
+  line-height: 22px;
+  white-space: nowrap;
+}
+
+.row__sub {
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+
+.money__fraction {
+  color: var(--ink-tertiary);
 }
 
 .network-icon {
@@ -578,6 +1015,12 @@ p {
   width: 18px;
   height: 18px;
   flex: 0 0 auto;
+}
+
+.field__label--network {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
 }
 
 .field__label--network .network-icon {
@@ -590,80 +1033,30 @@ p {
   height: 100%;
 }
 
-.holdings__status,
-.holdings__empty {
-  color: var(--ink-tertiary);
-  font-size: 12px;
-  line-height: 16px;
-  font-variant-numeric: tabular-nums;
-  text-align: right;
-}
+@media (max-width: 720px) {
+  .row__main {
+    flex-wrap: wrap;
+    gap: 12px;
+  }
 
-.holdings__empty {
-  text-align: left;
-}
+  .row__earn {
+    order: 3;
+  }
 
-.holdings__notices:empty {
-  display: none;
-}
+  .row__value {
+    min-width: 0;
+  }
 
-.holdings__notice {
-  padding: 8px 12px;
-  border-radius: 8px;
-  color: var(--positive);
-  background: #e1f2e4;
-  font-size: 13px;
-  font-weight: 500;
-  line-height: 19px;
-}
+  .topbar {
+    flex-wrap: wrap;
+    gap: 8px 16px;
+    padding-top: 12px;
+    padding-bottom: 12px;
+  }
 
-.holdings__notice + .holdings__notice {
-  margin-top: 6px;
-}
-
-.holdings__status--error {
-  color: var(--danger);
-}
-
-/* Lavender marks live work, per the pending-progress rule in DESIGN.md. */
-.progress {
-  height: 4px;
-  overflow: hidden;
-  border-radius: 999px;
-  background: var(--accent-muted);
-}
-
-.progress__fill {
-  width: 0;
-  height: 100%;
-  border-radius: inherit;
-  background: linear-gradient(90deg, #6541e7, #8967e6, #ad8ce5);
-  transition: width 250ms ease-out;
-}
-
-.asset-list {
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-  margin: 0;
-  padding: 0;
-  list-style: none;
-}
-
-.asset {
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-}
-
-.asset__line {
-  display: flex;
-  align-items: baseline;
-  gap: 12px;
-}
-
-.asset__line .asset__amount {
-  margin-left: auto;
+  .source-link span {
+    display: none;
+  }
 }
 
 /* Send (unshield) form, opened under a holding */
@@ -671,10 +1064,33 @@ p {
 .send {
   display: flex;
   flex-direction: column;
-  gap: 14px;
-  padding: 16px;
-  border-radius: 10px;
+  gap: 12px;
+  margin-bottom: 16px;
+  padding: 20px;
+  border-radius: 16px;
   background: var(--surface-secondary);
+}
+
+.send__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr) auto;
+  align-items: end;
+  gap: 12px;
+}
+
+.send__fields--public {
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) auto;
+}
+
+.send__fields .button {
+  min-width: 140px;
+}
+
+@media (max-width: 960px) {
+  .send__fields {
+    grid-template-columns: minmax(0, 1fr);
+    align-items: stretch;
+  }
 }
 
 .field__row {
@@ -705,44 +1121,43 @@ p {
 }
 
 .send__link {
-  color: var(--ink);
+  color: inherit;
   font-weight: 600;
   text-underline-offset: 3px;
 }
 
-.asset__label {
+/* Private key recovery */
+
+.keys {
   display: flex;
-  min-width: 0;
-  align-items: baseline;
+  max-width: 640px;
+  flex-direction: column;
+  gap: 24px;
+}
+
+.keys__head {
+  display: flex;
+  flex-direction: column;
   gap: 8px;
 }
 
-.asset__symbol {
-  font-size: 14px;
+.keys__title {
+  font-size: 30px;
   font-weight: 600;
+  letter-spacing: -0.5px;
+  line-height: 36px;
 }
 
-.asset__name {
-  overflow: hidden;
-  color: var(--ink-tertiary);
-  font-size: 12px;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-}
-
-.asset__amount {
-  font-family: "Space Grotesk", ui-sans-serif, system-ui, sans-serif;
+.keys__body {
+  color: var(--ink-secondary);
   font-size: 15px;
-  font-weight: 500;
-  font-variant-numeric: tabular-nums;
-  white-space: nowrap;
+  line-height: 22px;
+  text-wrap: pretty;
 }
 
-.asset__fraction {
-  color: var(--ink-tertiary);
+.field__error--start {
+  text-align: left;
 }
-
-/* Private key recovery */
 
 .key-result {
   display: flex;
@@ -802,8 +1217,163 @@ p {
   text-align: center;
 }
 
+/* Motion: short, eased, and only where something appears, changes state or is live. */
+
+@keyframes rise {
+  from {
+    opacity: 0;
+    transform: translateY(8px);
+  }
+}
+
+@keyframes fade {
+  from {
+    opacity: 0;
+  }
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: scale(0.4);
+  }
+}
+
+@keyframes breathe {
+  50% {
+    opacity: 0.55;
+  }
+}
+
+/* A view plays this each time it is shown: unlocking, locking and switching tabs. */
+.unlock,
+.holdings,
+.keys,
+#password-step,
+.key-result,
+.notice {
+  animation: rise 260ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.row--enter,
+.section--enter {
+  animation: rise 320ms cubic-bezier(0.22, 1, 0.36, 1) both;
+}
+
+.hero__balance--enter,
+.hero__note,
+.network-errors__item,
+.empty {
+  animation: fade 320ms ease-out both;
+}
+
+.network {
+  animation: fade 240ms ease-out both;
+  transition:
+    background 240ms ease-out,
+    color 240ms ease-out;
+}
+
+.network[data-state="scanning"] .network__status {
+  animation: breathe 1.6s ease-in-out infinite;
+}
+
+.network[data-state="done"]::after,
+#dropzone-icon-loaded {
+  animation: pop 280ms cubic-bezier(0.34, 1.56, 0.64, 1) both;
+}
+
+/* Rolling digits: every character sits in a one-line box, and a digit's 0–9 strip slides inside. */
+.roll {
+  display: inline-flex;
+}
+
+.roll__char,
+.roll__digit,
+.roll__strip > span {
+  display: block;
+  height: 1lh;
+}
+
+.roll__digit {
+  overflow: hidden;
+}
+
+.roll__strip {
+  display: flex;
+  flex-direction: column;
+  transition: transform 600ms cubic-bezier(0.22, 1, 0.36, 1);
+  will-change: transform;
+}
+
+.roll__strip > span {
+  text-align: center;
+}
+
+/* The live dot beside the yearly estimate. */
+.hero__note--live {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.hero__note--live::before {
+  width: 8px;
+  height: 8px;
+  flex: 0 0 auto;
+  border-radius: 50%;
+  background: var(--positive);
+  content: "";
+  animation: live 2.4s ease-out infinite;
+}
+
+@keyframes live {
+  0% {
+    box-shadow: 0 0 0 0 rgba(26, 111, 36, 0.35);
+  }
+
+  70%,
+  100% {
+    box-shadow: 0 0 0 7px rgba(26, 111, 36, 0);
+  }
+}
+
+.row__icon {
+  transition: transform 200ms cubic-bezier(0.22, 1, 0.36, 1);
+}
+
+.row__main:hover .row__icon {
+  transform: scale(1.05);
+}
+
+.tab:active,
+.network__retry:active {
+  transform: scale(0.97);
+}
+
 @media (prefers-reduced-motion: reduce) {
   * {
     transition: none !important;
+  }
+
+  .skeleton,
+  .unlock,
+  .holdings,
+  .keys,
+  #password-step,
+  .key-result,
+  .notice,
+  .row--enter,
+  .section--enter,
+  .hero__balance--enter,
+  .hero__note,
+  .hero__note--live::before,
+  .network,
+  .network__status,
+  .network::after,
+  .network-errors__item,
+  .empty,
+  #dropzone-icon-loaded {
+    animation: none !important;
   }
 }

@@ -22,19 +22,28 @@
       <span>Check your address bar. This page should only ever be <strong>https://recovery.fiber.so</strong></span>
     </p>
 
-    <nav class="topbar">
-      <a class="source-link" href="https://github.com/fiberevm/recovery" target="_blank" rel="noreferrer">
-        <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" /></svg>
-        <span>fiberevm/recovery</span>
-      </a>
-    </nav>
+    <header class="topbar">
+      <span class="wordmark">Fiber <span class="wordmark__product">Recovery</span></span>
+      <nav id="tabs" class="tabs" aria-label="Sections" hidden>
+        <button class="tab tab--active" type="button" data-view="holdings-view" aria-current="page">Holdings</button>
+        <button class="tab" type="button" data-view="keys-view">Private keys</button>
+      </nav>
+      <div class="topbar__end">
+        <a class="source-link" href="https://github.com/fiberevm/recovery" target="_blank" rel="noreferrer">
+          <svg viewBox="0 0 16 16" fill="currentColor" aria-hidden="true"><path d="M8 0C3.58 0 0 3.58 0 8c0 3.54 2.29 6.53 5.47 7.59.4.07.55-.17.55-.38 0-.19-.01-.82-.01-1.49-2.01.37-2.53-.49-2.69-.94-.09-.23-.48-.94-.82-1.13-.28-.15-.68-.52-.01-.53.63-.01 1.08.58 1.23.82.72 1.21 1.87.87 2.33.66.07-.52.28-.87.51-1.07-1.78-.2-3.64-.89-3.64-3.95 0-.87.31-1.59.82-2.15-.08-.2-.36-1.02.08-2.12 0 0 .67-.21 2.2.82.64-.18 1.32-.27 2-.27.68 0 1.36.09 2 .27 1.53-1.04 2.2-.82 2.2-.82.44 1.1.16 1.92.08 2.12.51.56.82 1.27.82 2.15 0 3.07-1.87 3.75-3.65 3.95.29.25.54.73.54 1.48 0 1.07-.01 1.93-.01 2.2 0 .21.15.46.55.38A8.013 8.013 0 0 0 16 8c0-4.42-3.58-8-8-8Z" /></svg>
+          <span>Source</span>
+        </a>
+        <button id="lock-button" class="pill" type="button" hidden>Lock</button>
+      </div>
+    </header>
 
     <main class="page">
       <!-- Step 1: choose a backup and unlock it. -->
-      <div id="unlock-view" class="stack">
+      <div id="unlock-view" class="unlock">
         <header class="intro">
           <h1>Recover your wallet</h1>
-          <p>Open your Fiber backup to recover your private holdings and keys. Your file and password never leave this browser.</p>
+          <p>Fiber Recovery lets you recover your assets if Fiber.so goes down. Open your Fiber backup to see your private balance, send it out, and recover your keys. Your file and password never leave this browser.</p>
+          <p class="intro__source">This code is open source and can be downloaded at <a href="https://github.com/fiberevm/recovery" target="_blank" rel="noreferrer">github.com/fiberevm/recovery</a>.</p>
         </header>
 
         <form id="unlock-form" class="form" novalidate>
@@ -61,7 +70,7 @@
 
           <details id="rpc-settings" class="settings">
             <summary class="settings__summary">RPC settings</summary>
-            <p class="settings__body">Your private holdings are scanned as soon as the backup unlocks, using these servers, one URL per line. They see your IP address and that someone read Fiber's pool history, never your keys or which funds are yours. Replace any of them with your own before unlocking.</p>
+            <p class="settings__body">Your balance is read from these servers as soon as the backup unlocks, one URL per line. They see your IP address and that someone read Fiber's pool history, never your keys or which funds are yours. Replace any of them with your own before unlocking.</p>
             <div id="rpc-fields" class="form"></div>
             <p id="rpc-settings-locked" class="settings__body" hidden>This page is now limited to these servers. Reload it to change them.</p>
           </details>
@@ -70,37 +79,42 @@
         </form>
       </div>
 
-      <!-- Step 2: what the backup can recover. -->
-      <div id="wallet-view" class="stack" hidden>
-        <header class="intro">
-          <h1 tabindex="-1" id="wallet-heading">Backup unlocked</h1>
-          <p>Choose what you want to recover.</p>
-        </header>
-
-        <section class="panel" aria-labelledby="holdings-title">
-          <div class="panel__head">
-            <h2 id="holdings-title" class="panel__title">Private holdings</h2>
-            <p class="panel__body">Fiber keeps private balances in its own pools on Ethereum, Arbitrum, Base and BNB Chain, built on Railgun. From the outside, nobody can tell which money in a pool is yours. This page downloads each pool's public history and uses keys from your backup to find and add up your share, here in your browser.</p>
-            <p class="panel__body">Most of that history is saved in this page, so the servers (RPCs) chosen before unlocking are only asked for recent blocks. To use different servers, reload the page and open RPC settings.</p>
+      <!-- Step 2: the unlocked wallet. -->
+      <div id="wallet-view" class="wallet" hidden>
+        <section id="holdings-view" class="holdings" aria-labelledby="wallet-heading">
+          <div class="hero">
+            <h1 id="wallet-heading" class="hero__label" tabindex="-1">Total balance</h1>
+            <div id="hero-balance" class="hero__balance hero__balance--loading" aria-busy="true">
+              <span class="skeleton hero__skeleton"></span>
+            </div>
+            <p id="hero-note" class="hero__note" hidden></p>
+            <div id="networks" class="networks"></div>
+            <div id="network-errors" class="network-errors"></div>
+            <p id="public-status" class="public-status" hidden>
+              <span id="public-text"></span>
+              <button id="deep-scan" class="network__retry" type="button" hidden>Look for other tokens</button>
+            </p>
           </div>
 
-          <div id="holdings-results" class="holdings"></div>
+          <div id="notices" class="notices"></div>
+          <div id="sections" class="sections"></div>
+          <div id="elsewhere" class="sections"></div>
         </section>
 
-        <section class="panel" aria-labelledby="keys-title">
-          <div class="panel__head">
-            <h2 id="keys-title" class="panel__title">Private key recovery</h2>
-            <p class="panel__body">Every address in your Fiber wallet is created from your backup, one numbered step at a time. Paste one of your addresses and this page finds the step that made it, then shows that address's private key. You can import the key into another wallet, such as MetaMask for EVM addresses or Phantom for Solana.</p>
-            <p class="panel__body">This works offline. Anyone who sees the key can take everything at that address, so never share it.</p>
-          </div>
+        <section id="keys-view" class="keys" aria-labelledby="keys-title" hidden>
+          <header class="keys__head">
+            <h1 id="keys-title" class="keys__title" tabindex="-1">Private keys</h1>
+            <p class="keys__body">Paste one of your Fiber wallet addresses to get its private key, which you can import into another wallet such as MetaMask or Phantom. This works offline.</p>
+            <p class="keys__body">Anyone who sees the key can take everything at that address, so never share it.</p>
+          </header>
 
           <form id="key-form" class="form" novalidate>
             <div class="field">
               <label class="field__label" for="key-address">Address</label>
               <input id="key-address" class="field__input field__input--mono" type="text" autocomplete="off" spellcheck="false" placeholder="0x… or a Solana address" />
             </div>
-            <p id="key-error" class="field__error" role="alert" hidden></p>
-            <button id="key-button" class="button button--secondary" type="submit" disabled>
+            <p id="key-error" class="field__error field__error--start" role="alert" hidden></p>
+            <button id="key-button" class="button button--primary" type="submit" disabled>
               <span class="button__label">Find private key</span>
               <span class="spinner" aria-hidden="true"></span>
             </button>
@@ -118,11 +132,9 @@
             </div>
           </div>
         </section>
-
-        <button id="lock-button" class="button button--secondary" type="button">Lock</button>
       </div>
     </main>
 
-    <p class="footnote">Your backup and password never leave this browser. The page only connects to your chosen RPCs, and to ipfs-lb.com for proving files when a send needs one that isn't built in.</p>
+    <p class="footnote">Your backup and password never leave this browser. The page only connects to your chosen RPCs, and to ipfs-lb.com for proving files when a send needs one that isn't built in. Dollar values are estimates from on-chain price feeds, read through the same RPCs.</p>
   </body>
 </html>

@@ -8,6 +8,8 @@ export type RawLog = {
   logIndex: string;
   topics: string[];
   data: string;
+  /** The contract that emitted it; servers always send it, snapshots leave it out. */
+  address?: string;
 };
 
 /** Largest window asked of an RPC, so one slow server can't hold up much of a scan. */
@@ -31,11 +33,13 @@ const sleep = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
  */
 export async function fetchPoolLogs(
   rpcUrls: URL[],
-  address: string,
+  /** A contract address, or any eth_getLogs filter (address and topics) without the block range. */
+  source: string | LogFilter,
   from: number,
   to: number,
   onProgress: (fraction: number) => void,
 ): Promise<RawLog[]> {
+  const filter: LogFilter = typeof source === "string" ? { address: source } : source;
   const total = to - from + 1;
   let done = 0;
   onProgress(0);
@@ -62,7 +66,7 @@ export async function fetchPoolLogs(
         end = start + endpoint.span - 1;
       }
       try {
-        const params = [{ address, fromBlock: `0x${start.toString(16)}`, toBlock: `0x${end.toString(16)}` }];
+        const params = [{ ...filter, fromBlock: `0x${start.toString(16)}`, toBlock: `0x${end.toString(16)}` }];
         logs.push(...(await rpc<RawLog[]>(endpoint.url, "eth_getLogs", params, timeoutMs)));
         endpoint.pacer.speedUp();
         endpoint.strikes = 0;
@@ -102,6 +106,8 @@ export async function fetchPoolLogs(
     (a, b) => Number(a.blockNumber) - Number(b.blockNumber) || Number(a.logIndex) - Number(b.logIndex),
   );
 }
+
+export type LogFilter = { address?: string; topics?: Array<string | string[] | null> };
 
 type Endpoint = { url: URL; span: number; strikes: number; pacer: Pacer };
 
